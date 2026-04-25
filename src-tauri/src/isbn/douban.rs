@@ -10,7 +10,7 @@ const SEL_INFO:   &str = "#info";
 const SEL_DESC:   &str = "#link-report .intro p, #link-report p";
 const SEL_RATING: &str = "strong[property='v:average']";
 
-pub async fn fetch(isbn: &str) -> Result<BookMeta> {
+pub async fn fetch(isbn: &str, cookie: Option<&str>) -> Result<BookMeta> {
     let url = format!("https://book.douban.com/isbn/{}/", isbn);
 
     let client = reqwest::Client::builder()
@@ -18,12 +18,15 @@ pub async fn fetch(isbn: &str) -> Result<BookMeta> {
         .timeout(Duration::from_secs(15))
         .build()?;
 
-    let resp = client
+    let mut req = client
         .get(&url)
         .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
         .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-        .send()
-        .await?;
+        .header("Referer", "https://book.douban.com/");
+    if let Some(c) = cookie.filter(|s| !s.trim().is_empty()) {
+        req = req.header("Cookie", c.trim());
+    }
+    let resp = req.send().await?;
 
     if !resp.status().is_success() {
         return Ok(BookMeta::default());

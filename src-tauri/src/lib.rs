@@ -9,9 +9,14 @@ use std::sync::Mutex;
 #[tauri::command]
 async fn fetch_by_isbn(isbn: String, source: Option<String>) -> Result<isbn::BookMeta, String> {
     let cfg = config::load();
-    isbn::fetch_by_isbn(&isbn, source.as_deref(), cfg.google_books_api_key.as_deref())
-        .await
-        .map_err(|e| e.to_string())
+    isbn::fetch_by_isbn(
+        &isbn,
+        source.as_deref(),
+        cfg.google_books_api_key.as_deref(),
+        cfg.douban_cookie.as_deref(),
+    )
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -19,6 +24,50 @@ pub fn run() {
     let conn = db::init_db().expect("failed to initialize database");
 
     tauri::Builder::default()
+        .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::menu::{AboutMetadata, MenuBuilder, SubmenuBuilder};
+                let version = app.package_info().version.to_string();
+                let icon = tauri::image::Image::from_bytes(
+                    include_bytes!("../icons/icon.png")
+                ).ok();
+                let about = AboutMetadata {
+                    name: Some("书影 BookShadow".to_string()),
+                    version: Some(version),
+                    short_version: Some(String::new()), // suppress "(build)" on macOS
+                    copyright: Some("© 2026 Sun Jiaming".to_string()),
+                    icon,
+                    ..Default::default()
+                };
+                let app_menu = SubmenuBuilder::new(app, "书影 BookShadow")
+                    .about(Some(about))
+                    .separator()
+                    .services()
+                    .separator()
+                    .hide()
+                    .hide_others()
+                    .show_all()
+                    .separator()
+                    .quit()
+                    .build()?;
+                let edit_menu = SubmenuBuilder::new(app, "编辑")
+                    .undo()
+                    .redo()
+                    .separator()
+                    .cut()
+                    .copy()
+                    .paste()
+                    .select_all()
+                    .build()?;
+                let menu = MenuBuilder::new(app)
+                    .item(&app_menu)
+                    .item(&edit_menu)
+                    .build()?;
+                app.set_menu(menu)?;
+            }
+            Ok(())
+        })
         .register_uri_scheme_protocol("bookcover", |_ctx, request| {
             let forbidden = tauri::http::Response::builder()
                 .status(403)
@@ -67,6 +116,7 @@ pub fn run() {
         .manage(DbState(Mutex::new(conn)))
         .invoke_handler(tauri::generate_handler![
             fetch_by_isbn,
+            commands::batch_import::scan_isbn_image,
             commands::book::get_books,
             commands::book::get_book,
             commands::book::create_book,

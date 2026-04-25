@@ -5,6 +5,7 @@ use std::path::PathBuf;
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct AppConfig {
     pub google_books_api_key: Option<String>,
+    pub douban_cookie: Option<String>,
 }
 
 fn config_path() -> PathBuf {

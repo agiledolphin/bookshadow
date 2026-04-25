@@ -89,17 +89,17 @@ pub fn normalize_date(s: &str) -> Option<String> {
     }
 }
 
-pub async fn fetch_by_isbn(isbn: &str, source: Option<&str>, google_api_key: Option<&str>) -> Result<BookMeta> {
+pub async fn fetch_by_isbn(isbn: &str, source: Option<&str>, google_api_key: Option<&str>, douban_cookie: Option<&str>) -> Result<BookMeta> {
     let fetch_single = |meta: BookMeta, name: &str| -> Result<BookMeta> {
         if meta.title.is_some() { Ok(meta) } else { Err(anyhow!("{} 未找到该书", name)) }
     };
 
     match source {
-        Some("douban") => fetch_single(douban::fetch(isbn).await?, "豆瓣"),
+        Some("douban") => fetch_single(douban::fetch(isbn, douban_cookie).await?, "豆瓣"),
         Some("google") => fetch_single(google_books::fetch(isbn, google_api_key).await?, "Google Books"),
         Some("openlibrary") => fetch_single(open_library::fetch(isbn).await?, "Open Library"),
         _ => {
-            if let Ok(meta) = douban::fetch(isbn).await {
+            if let Ok(meta) = douban::fetch(isbn, douban_cookie).await {
                 if meta.title.is_some() { return Ok(meta); }
             }
             if let Ok(meta) = google_books::fetch(isbn, google_api_key).await {

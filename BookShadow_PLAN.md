@@ -2,7 +2,7 @@
 
 ## 一、项目概述
 
-书影（BookShadow）是一款基于 **Tauri + Rust + React** 的家庭藏书管理桌面应用，支持书籍信息管理、ISBN 元数据获取、Markdown 书评编写与全文搜索。
+书影（BookShadow）是一款基于 **Tauri 2 + Rust + React** 的家庭藏书管理桌面应用，支持书籍信息管理、ISBN 元数据获取、条码批量导入、Markdown 书评编写与全文搜索。
 
 ---
 
@@ -12,54 +12,59 @@
 
 | 层次 | 技术 | 说明 |
 |------|------|------|
-| 前端 UI | React 18 + TypeScript | 组件化 UI |
-| UI 组件库 | shadcn/ui + Tailwind CSS | 样式系统 |
+| 前端 UI | React 19 + TypeScript | 组件化 UI |
+| 样式 | Tailwind CSS v4 | `@tailwindcss/vite` 插件，非 PostCSS |
 | 状态管理 | Zustand | 轻量，适合桌面应用 |
 | Markdown 编辑器 | CodeMirror 6 | 内置语法高亮 |
 | 桌面壳 | Tauri 2 | 跨平台桌面容器 |
-| 后端逻辑 | Rust | 数据库操作、ISBN 拉取、文件 IO |
-| 数据库 | SQLite（via `rusqlite`） | 本地存储 |
-| HTTP 客户端 | `reqwest`（Rust） | ISBN 元数据获取 |
-| 全文搜索 | SQLite FTS5 | 原生全文索引 |
+| 后端逻辑 | Rust | 数据库操作、ISBN 拉取、文件 IO、条码识别 |
+| 数据库 | SQLite（via `rusqlite` bundled） | 本地存储 |
+| HTTP 客户端 | `reqwest`（rustls-tls） | ISBN 元数据获取、封面下载 |
+| 全文搜索 | SQLite FTS5 | 原生全文索引，LIKE 兜底 |
+| 条码识别 | `rxing`（EAN-13） | 纯 Rust，无原生依赖 |
+| 图像处理 | `image` crate | 缩略图生成（批量导入预览） |
 | 构建工具 | Vite | 前端构建 |
 
 ### 2.2 目录结构
 
 ```
 bookshadow/
-├── src/                        # React 前端
+├── src/                          # React 前端
 │   ├── components/
-│   │   ├── BookGrid.tsx        # 网格视图
-│   │   ├── BookList.tsx        # 列表视图
-│   │   ├── BookForm.tsx        # 新增/编辑表单
-│   │   ├── BookDetail.tsx      # 书籍详情页
-│   │   ├── ReviewEditor.tsx    # Markdown 书评编辑器
-│   │   ├── FilterPanel.tsx     # 筛选面板
-│   │   └── SearchBar.tsx       # 搜索框
+│   │   ├── BookGrid.tsx          # 网格视图
+│   │   ├── BookList.tsx          # 列表视图
+│   │   ├── BookCard.tsx          # 书籍卡片
+│   │   ├── BookForm.tsx          # 新增/编辑表单
+│   │   ├── BookDetail.tsx        # 书籍详情页
+│   │   ├── BatchImportModal.tsx  # 批量导入
+│   │   ├── ReviewEditor.tsx      # Markdown 书评编辑器
+│   │   ├── FilterPanel.tsx       # 筛选面板
+│   │   ├── SettingsModal.tsx     # 设置
+│   │   └── Toast.tsx             # 消息通知
 │   ├── stores/
-│   │   ├── bookStore.ts        # 书籍状态
-│   │   └── uiStore.ts          # UI 状态（视图模式等）
-│   ├── hooks/
-│   │   └── useBooks.ts         # 书籍 CRUD hooks
+│   │   ├── bookStore.ts          # 书籍状态
+│   │   └── toastStore.ts         # Toast 状态
 │   ├── types/
-│   │   └── book.ts             # 类型定义
+│   │   └── book.ts               # 类型定义
 │   └── App.tsx
 ├── src-tauri/
 │   ├── src/
-│   │   ├── main.rs
+│   │   ├── lib.rs                # Tauri builder，注册所有命令
 │   │   ├── db/
-│   │   │   ├── mod.rs
-│   │   │   ├── schema.rs       # 建表 SQL
-│   │   │   └── queries.rs      # CRUD 查询
+│   │   │   ├── mod.rs            # init_db，data_dir
+│   │   │   └── schema.rs         # DDL + migration
 │   │   ├── isbn/
-│   │   │   ├── mod.rs
-│   │   │   ├── douban.rs       # 豆瓣 API
-│   │   │   ├── google_books.rs # Google Books API
-│   │   │   └── open_library.rs # Open Library API
-│   │   └── commands/
-│   │       ├── book.rs         # book CRUD commands
-│   │       ├── review.rs       # review commands
-│   │       └── search.rs       # 搜索 commands
+│   │   │   ├── mod.rs            # fetch_by_isbn 级联
+│   │   │   ├── douban.rs         # 豆瓣 HTML 抓取
+│   │   │   ├── google_books.rs   # Google Books API
+│   │   │   └── open_library.rs   # Open Library API
+│   │   ├── commands/
+│   │   │   ├── book.rs           # 书籍 CRUD
+│   │   │   ├── review.rs         # 书评 CRUD
+│   │   │   ├── search.rs         # FTS5 全文搜索
+│   │   │   ├── settings.rs       # 配置读写
+│   │   │   └── batch_import.rs   # 条码扫描 + 缩略图
+│   │   └── config.rs             # AppConfig（google_books_api_key, douban_cookie）
 │   └── tauri.conf.json
 └── BookShadow_PLAN.md
 ```
@@ -68,9 +73,9 @@ bookshadow/
 
 ```
 ~/.bookshadow/
-├── sqlite/
-│   └── bookshadow.db           # SQLite 主数据库
-└── covers/                     # 封面图片缓存
+├── sqlite/bookshadow.db   # 书籍与书评数据库
+├── covers/                # 封面图片本地缓存
+└── config.json            # 应用配置
 ```
 
 ---
@@ -86,15 +91,17 @@ CREATE TABLE books (
     author      TEXT,
     isbn        TEXT UNIQUE,
     publisher   TEXT,
-    pub_year    INTEGER,
-    language    TEXT,           -- 'zh', 'en', 'ja', etc.
-    region      TEXT,           -- 'CN', 'JP', 'US', etc.
-    category    TEXT,           -- '小说', '历史', etc.
+    pub_date    TEXT,
+    language    TEXT,
+    region      TEXT,
+    category    TEXT,
     tags        TEXT,           -- JSON array
     rating      INTEGER,        -- 1-5
     cover_url   TEXT,
     cover_local TEXT,           -- 本地缓存路径
     description TEXT,
+    translator  TEXT,
+    status      TEXT,           -- 'want' | 'reading' | 'read'
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -106,7 +113,7 @@ CREATE TABLE books (
 CREATE TABLE reviews (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     book_id     INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
-    content     TEXT NOT NULL,  -- Markdown 正文
+    content     TEXT NOT NULL,
     reviewed_at TEXT NOT NULL DEFAULT (datetime('now')),
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
@@ -124,7 +131,7 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 
 ---
 
-## 四、Tauri Commands 接口设计
+## 四、Tauri Commands 接口
 
 ### 书籍管理
 
@@ -132,11 +139,13 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 |---------|------|------|------|
 | `get_books` | `filters: BookFilters` | `Vec<Book>` | 带筛选的列表 |
 | `get_book` | `id: i64` | `Book` | 单本详情 |
-| `create_book` | `payload: CreateBook` | `Book` | 新增 |
+| `create_book` | `payload: CreateBook` | `Book` | 新增（ISBN 重复报错） |
 | `update_book` | `id: i64, payload: UpdateBook` | `Book` | 更新 |
-| `delete_book` | `id: i64` | `()` | 删除 |
-| `fetch_by_isbn` | `isbn: String` | `BookMeta` | ISBN 拉取元数据 |
-| `search_books` | `query: String` | `Vec<Book>` | 全文搜索 |
+| `delete_book` | `id: i64` | `()` | 删除（含本地封面） |
+| `download_cover` | `id, url, isbn` | `String` | 下载封面并更新 DB |
+| `fetch_by_isbn` | `isbn, source` | `BookMeta` | ISBN 元数据级联拉取 |
+| `scan_isbn_image` | `path: String` | `ScanResult` | 条码识别 + 缩略图 |
+| `search_books` | `query: String` | `Vec<Book>` | FTS5 全文搜索 |
 
 ### 书评管理
 
@@ -144,9 +153,16 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 |---------|------|------|------|
 | `get_reviews` | `book_id: i64` | `Vec<Review>` | 书评列表 |
 | `create_review` | `payload: CreateReview` | `Review` | 新增书评 |
-| `update_review` | `id: i64, payload: UpdateReview` | `Review` | 更新书评 |
+| `update_review` | `id, payload` | `Review` | 更新书评 |
 | `delete_review` | `id: i64` | `()` | 删除书评 |
-| `import_review_md` | `book_id: i64, path: String` | `Review` | 从文件导入 |
+| `import_review_md` | `book_id, path` | `Review` | 从文件导入 |
+
+### 配置
+
+| Command | 说明 |
+|---------|------|
+| `get_config` | 读取 config.json |
+| `save_config` | 写入 config.json |
 
 ---
 
@@ -154,111 +170,89 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 
 按优先级顺序依次尝试：
 
-1. **豆瓣读书**（中文书优先，非官方 API，有频率限制）
-2. **Google Books API**（需网络，无需 key，有配额）
-3. **Open Library API**（开放，无需 key）
+1. **豆瓣读书** — 中文书优先，HTML 抓取；需配置 Cookie 以绕过反爬
+2. **Google Books API** — 外文书回退，支持配置 API Key
+3. **Open Library API** — 开放，无需 Key
 
-获取字段：书名、作者、出版社、出版年、封面图、简介、语言。
-
----
-
-## 六、前端页面设计
-
-### 6.1 主界面布局
-
-```
-┌─────────────────────────────────────────────────────┐
-│  [搜索框]          [网格/列表切换]   [+ 新增]        │  ← 顶部工具栏
-├──────────┬──────────────────────────────────────────┤
-│          │                                          │
-│  筛选面板 │  书籍视图（网格 or 列表）                  │
-│  - 星级   │                                          │
-│  - 地域   │                                          │
-│  - 类别   │                                          │
-│  - 语言   │                                          │
-│          │                                          │
-└──────────┴──────────────────────────────────────────┘
-```
-
-### 6.2 书籍详情 / 编辑页
-
-- 左侧：封面 + 基本信息（ISBN、作者、出版社、年份、星级、地域、类别、语言、标签）
-- 右侧：书评列表 + Markdown 编辑器
-
-### 6.3 新增书籍流程
-
-1. 输入 ISBN → 自动拉取元数据 → 填充表单
-2. 或手动填写所有字段
-3. 保存
+批量导入时，扫码（Phase 1）全部并行完成后，元数据抓取（Phase 2）按序执行，每条间隔 1.2 秒，避免触发频率限制。
 
 ---
 
-## 七、开发阶段计划
+## 六、开发进度
 
-### Phase 1：项目初始化与基础架构 ✅ 已完成
+### Phase 1：项目初始化与基础架构 ✅
 
-- [x] `create-tauri-app` 初始化项目（React + TypeScript + Vite）
-- [x] 配置 Tailwind CSS v4
-- [x] Rust 端：初始化 SQLite 连接，实现 schema 建表（books / reviews / FTS5 触发器）
-- [x] 实现数据存储目录 `~/.bookshadow/sqlite/` 与 `covers/` 自动创建
-- [x] 搭建 Zustand store 骨架
+- [x] Tauri 2 + React + TypeScript + Vite 初始化
+- [x] Tailwind CSS v4 配置
+- [x] SQLite 连接与 schema 建表（books / reviews / FTS5）
+- [x] 数据目录 `~/.bookshadow/` 自动创建
+- [x] Zustand store 骨架
 
-### Phase 2：书籍 CRUD ✅ 已完成（待端到端测试）
+### Phase 2：书籍 CRUD ✅
 
-- [x] Rust commands：`create_book`, `get_books`, `get_book`, `update_book`, `delete_book`
-- [x] 前端：BookForm 组件（新增 / 编辑，含 ISBN 自动填充入口）
-- [x] 前端：BookGrid 组件（封面卡片，封面 URL 展示）
-- [x] 前端：BookList 组件（行列表）
-- [x] 前端：网格 / 列表视图切换
-- [x] 前端：BookDetail 详情弹层
+- [x] Rust commands：create / get / update / delete book
+- [x] BookForm 组件（新增 / 编辑，含 ISBN 自动填充）
+- [x] BookGrid 网格视图（封面卡片，骨架屏加载）
+- [x] BookList 列表视图
+- [x] 网格 / 列表视图切换
+- [x] BookDetail 详情弹层
 
-### Phase 3：筛选与搜索 ✅ 已完成（待端到端测试）
+### Phase 3：筛选与搜索 ✅
 
-- [x] Rust：带筛选参数的 `get_books`（星级、地域、类别、语言）
-- [x] Rust：SQLite FTS5 索引 + `search_books` command（兼 LIKE 兜底）
-- [x] 前端：FilterPanel 筛选面板（分组卡片样式）
-- [x] 前端：SearchBar 搜索框（防抖 300ms，集成在工具栏）
-- [x] 前端：筛选与搜索状态联动
+- [x] 带筛选参数的 `get_books`（状态、星级、地域、类别、语言、年代）
+- [x] SQLite FTS5 + LIKE 兜底的 `search_books`
+- [x] FilterPanel 筛选面板（分组，含各状态书籍数量）
+- [x] 搜索框（防抖 300ms）
 
-### Phase 4：ISBN 元数据获取 🔶 部分完成
+### Phase 4：ISBN 元数据获取 ✅
 
-- [x] Rust：`fetch_by_isbn` command，依次尝试 Google Books → Open Library
-- [x] 前端：ISBN 输入框 + 一键拉取 + loading / 错误状态
-- [ ] **封面图片下载并缓存到 `~/.bookshadow/covers/`**（Rust 端实现，前端优先读本地）
+- [x] 豆瓣 HTML 抓取（处理 `\u{a0}`、作者国籍前缀解析）
+- [x] Google Books API 回退
+- [x] Open Library 最终回退
+- [x] 封面下载缓存（`bookcover://` 自定义协议）
+- [x] 豆瓣 Cookie 配置（绕过反爬）
 
-### Phase 5：书评系统 🔶 部分完成
+### Phase 5：书评系统 ✅
 
-- [x] Rust commands：书评 CRUD + `import_review_md`
-- [x] 前端：CodeMirror 6 Markdown 编辑器集成
-- [x] 前端：书评列表，显示书评日期
-- [x] 前端：从 `.md` 文件导入书评
-- [ ] **ReviewEditor 编辑 / 预览双模式切换**（当前仅编辑模式，无渲染预览）
+- [x] 书评 CRUD + `.md` 文件导入
+- [x] CodeMirror 6 Markdown 编辑器
+- [x] 编辑 / 预览双模式切换
 
-### Phase 6：打磨与发布 ⬜ 待开发
+### Phase 6：UI 打磨 ✅
 
-- [ ] Toast 错误通知（替代 console.error / alert）
-- [ ] 窗口尺寸与位置记忆（写入 `~/.bookshadow/config.json`）
-- [ ] 封面图片占位图优化（加载中骨架屏）
-- [ ] macOS 打包测试（`npm run tauri build`）
-- [ ] README 用户文档
+- [x] Toast 错误通知
+- [x] 窗口尺寸与位置记忆（tauri-plugin-window-state）
+- [x] macOS 无标题栏（titleBarStyle: Overlay）+ 自定义拖拽区域
+- [x] macOS「关于」对话框自定义（名称、版本、版权、图标）
+- [x] 书籍浏览区独立滚动（工具栏固定）
+
+### Phase 7：批量导入 ✅（v0.3.0）
+
+- [x] 图片条码识别（rxing EAN-13，含 ISBN-13 校验位验证）
+- [x] 批量扫码并行，元数据抓取串行（间隔 1.2s）
+- [x] 缩略图生成（Rust image crate，base64 内嵌）
+- [x] 扫码失败 → 手动输入 ISBN
+- [x] 重复书籍检测并提示跳过
+- [x] 导入进度实时显示，封面异步下载
 
 ---
 
-## 八、关键风险与应对
+## 七、关键设计决策
 
-| 风险 | 应对 |
+| 决策 | 原因 |
 |------|------|
-| 豆瓣 API 不稳定 / 被封 | 降级到 Google Books，不强依赖豆瓣 |
-| FTS5 中文分词效果差 | 结合 LIKE 模糊搜索兜底 |
-| 封面图片版权 | 仅本地缓存，不对外分发 |
-| Tauri 2 生态尚不成熟 | 锁定版本，避免频繁升级 |
+| `SELECT_COLS` 常量 + `row_to_book` 按索引映射 | 避免字段顺序不一致导致的 bug |
+| `bookcover://` 自定义协议 | 安全地服务本地封面，防路径穿越 |
+| `data-tauri-drag-region` 需显式声明 `core:window:allow-start-dragging` | 不在 `core:default` 中，需手动加入 capabilities |
+| 豆瓣 Cookie 存 config.json | 避免硬编码，用户可自行更新过期 Cookie |
+| 批量导入扫码并行 + 抓取串行 | 扫码是本地 CPU 任务可并行；网络请求串行避免触发豆瓣频率限制 |
 
 ---
 
-## 九、后续可扩展方向（超出当前范围）
+## 八、后续可扩展方向
 
-- 数据导出（CSV / JSON / 豆瓣格式）
+- 数据导出（CSV / JSON）
 - iCloud / 本地 NAS 同步
 - 阅读进度追踪
 - 借阅记录
-- 更多 ISBN 数据源（豆瓣 v2、开卷数据）
+- WebView 方案绕过豆瓣反爬（更彻底，无需手动维护 Cookie）

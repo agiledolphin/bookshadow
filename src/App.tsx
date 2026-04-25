@@ -8,6 +8,7 @@ import { BookList } from "./components/BookList";
 import { BookDetail } from "./components/BookDetail";
 import { BookForm } from "./components/BookForm";
 import { SettingsModal } from "./components/SettingsModal";
+import { BatchImportModal } from "./components/BatchImportModal";
 import { Toast } from "./components/Toast";
 import "./App.css";
 
@@ -18,6 +19,7 @@ export default function App() {
   const [editingBook, setEditingBook] = useState<Book | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showBatchImport, setShowBatchImport] = useState(false);
   const [query, setQuery] = useState("");
 
   useEffect(() => {
@@ -92,6 +94,16 @@ export default function App() {
           </div>
 
           <button
+            onClick={() => setShowBatchImport(true)}
+            title="批量导入"
+            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+          </button>
+
+          <button
             onClick={() => setShowForm(true)}
             title="新增书籍"
             className="p-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors cursor-pointer"
@@ -113,7 +125,7 @@ export default function App() {
           </button>
         </header>
 
-        <main className="flex-1 flex flex-col min-w-0">
+        <main className="flex-1 min-h-0 flex flex-col min-w-0">
           {loading ? (
             <div className="flex-1 flex items-center justify-center text-gray-400">
               <span className="text-sm">加载中…</span>
@@ -133,6 +145,7 @@ export default function App() {
       {editingBook && <BookForm book={editingBook} onClose={() => { setEditingBook(null); fetchBooks(); }} />}
       {showForm && <BookForm onClose={() => { setShowForm(false); fetchBooks(); }} />}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {showBatchImport && <BatchImportModal onClose={() => setShowBatchImport(false)} />}
       <Toast />
     </div>
   );

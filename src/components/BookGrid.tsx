@@ -23,10 +23,12 @@ export function BookGrid({ books, onSelect, onEdit, onDelete }: Props) {
   }
 
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-4 p-4 overflow-y-auto">
-      {books.map((book) => (
-        <BookCard key={book.id} book={book} onClick={() => onSelect(book)} onEdit={() => onEdit(book)} onDelete={() => onDelete(book)} />
-      ))}
+    <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-4 p-4">
+        {books.map((book) => (
+          <BookCard key={book.id} book={book} onClick={() => onSelect(book)} onEdit={() => onEdit(book)} onDelete={() => onDelete(book)} />
+        ))}
+      </div>
     </div>
   );
 }
