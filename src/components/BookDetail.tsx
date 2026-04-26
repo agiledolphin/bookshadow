@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Book, BookMeta, CreateBook } from "../types/book";
 import { STATUSES, LANGUAGES, REGIONS, CATEGORIES } from "../types/book";
 import { useBookStore } from "../stores/bookStore";
 import { useToastStore } from "../stores/toastStore";
 import { StarRating } from "./StarRating";
+import { TagInput, parseTags } from "./TagInput";
 import { ReviewEditor } from "./ReviewEditor";
 
 function localCoverSrc(path: string): string {
@@ -15,9 +16,11 @@ function localCoverSrc(path: string): string {
 interface Props {
   book: Book;
   onClose: () => void;
+  onPrev: (() => void) | null;
+  onNext: (() => void) | null;
 }
 
-export function BookDetail({ book, onClose }: Props) {
+export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
   // View state
   const [descExpanded, setDescExpanded] = useState(false);
 
@@ -30,8 +33,13 @@ export function BookDetail({ book, onClose }: Props) {
   const [fetchError, setFetchError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const { updateBook } = useBookStore();
+  const { updateBook, allBooks } = useBookStore();
   const { addToast } = useToastStore();
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const b of allBooks) for (const t of parseTags(b.tags ?? "[]")) set.add(t);
+    return Array.from(set).sort();
+  }, [allBooks]);
 
   const isDoubanUrl = /douban\.com\/subject\/\d+/.test(isbnInput.trim());
 
@@ -40,11 +48,18 @@ export function BookDetail({ book, onClose }: Props) {
       if (e.key === "Escape") {
         if (editMode) setEditMode(false);
         else onClose();
+      } else if ((e.key === "e" || e.key === "E") && !editMode) {
+        const el = e.target as HTMLElement;
+        if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable) return;
+        setForm(makeForm(book));
+        setIsbnInput(book.isbn ?? "");
+        setFetchError("");
+        setEditMode(true);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose, editMode]);
+  }, [onClose, editMode, book]);
 
   const enterEditMode = () => {
     setForm(makeForm(book));
@@ -110,6 +125,30 @@ export function BookDetail({ book, onClose }: Props) {
         {/* Header */}
         <div className="shrink-0 flex items-center gap-3 px-5 py-4 border-b">
           <h2 className="text-lg font-semibold truncate flex-1">{book.title}</h2>
+          {!editMode && (onPrev || onNext) && (
+            <div className="flex items-center gap-0.5 shrink-0">
+              <button
+                onClick={onPrev ?? undefined}
+                disabled={!onPrev}
+                title="上一本 ←"
+                className="p-1.5 rounded text-gray-400 hover:text-gray-600 disabled:opacity-25 disabled:cursor-default cursor-pointer transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <button
+                onClick={onNext ?? undefined}
+                disabled={!onNext}
+                title="下一本 →"
+                className="p-1.5 rounded text-gray-400 hover:text-gray-600 disabled:opacity-25 disabled:cursor-default cursor-pointer transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          )}
           {editMode ? (
             <div className="flex items-center gap-2 shrink-0">
               <button
@@ -299,6 +338,10 @@ export function BookDetail({ book, onClose }: Props) {
                     className={`${inputCls} resize-none`}
                   />
                 </FormField>
+
+                <FormField label="标签">
+                  <TagInput value={form.tags ?? "[]"} onChange={v => set("tags", v)} suggestions={allTags} />
+                </FormField>
               </div>
             </div>
           ) : (
@@ -343,6 +386,18 @@ export function BookDetail({ book, onClose }: Props) {
                   {book.region && <InfoRow label="地域" value={book.region} />}
                   {book.category && <InfoRow label="类别" value={book.category} />}
                 </div>
+                {(() => {
+                  const tags = parseTags(book.tags ?? "[]");
+                  return tags.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {tags.map((tag) => (
+                        <span key={tag} className="bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null;
+                })()}
                 {book.description && (
                   <div className="mt-3">
                     <p className={`text-sm text-gray-600 leading-relaxed ${descExpanded ? "" : "line-clamp-4"}`}>

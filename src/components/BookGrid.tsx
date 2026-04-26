@@ -1,13 +1,30 @@
+import { useEffect, useRef } from "react";
 import type { Book } from "../types/book";
 import { BookCard } from "./BookCard";
 
 interface Props {
   books: Book[];
+  hasMore: boolean;
+  isLoadingMore: boolean;
   onSelect: (book: Book) => void;
   onDelete: (book: Book) => void;
+  onLoadMore: () => void;
 }
 
-export function BookGrid({ books, onSelect, onDelete }: Props) {
+export function BookGrid({ books, hasMore, isLoadingMore, onSelect, onDelete, onLoadMore }: Props) {
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) onLoadMore(); },
+      { rootMargin: "200px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [onLoadMore]);
+
   if (books.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-gray-400">
@@ -28,6 +45,13 @@ export function BookGrid({ books, onSelect, onDelete }: Props) {
           <BookCard key={book.id} book={book} onClick={() => onSelect(book)} onDelete={() => onDelete(book)} />
         ))}
       </div>
+      <div ref={sentinelRef} className="h-px" />
+      {isLoadingMore && (
+        <div className="py-4 text-center text-sm text-gray-400">加载中…</div>
+      )}
+      {!hasMore && books.length > 0 && (
+        <div className="py-4 text-center text-xs text-gray-300">已加载全部 {books.length} 本</div>
+      )}
     </div>
   );
 }

@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Book, CreateBook, BookMeta } from "../types/book";
 import { useBookStore } from "../stores/bookStore";
 import { useToastStore } from "../stores/toastStore";
 import { StarRating } from "./StarRating";
+import { TagInput, parseTags } from "./TagInput";
 import { LANGUAGES, REGIONS, CATEGORIES, STATUSES } from "../types/book";
 
 interface Props {
@@ -12,7 +13,12 @@ interface Props {
 }
 
 export function BookForm({ book, onClose }: Props) {
-  const { createBook, updateBook } = useBookStore();
+  const { createBook, updateBook, allBooks } = useBookStore();
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const b of allBooks) for (const t of parseTags(b.tags ?? "[]")) set.add(t);
+    return Array.from(set).sort();
+  }, [allBooks]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -271,6 +277,10 @@ export function BookForm({ book, onClose }: Props) {
               onChange={(e) => set("description", e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
             />
+          </Field>
+
+          <Field label="标签">
+            <TagInput value={form.tags ?? "[]"} onChange={(v) => set("tags", v)} suggestions={allTags} />
           </Field>
         </form>
 

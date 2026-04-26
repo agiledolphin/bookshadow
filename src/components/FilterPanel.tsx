@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useBookStore } from "../stores/bookStore";
 import { LANGUAGES, PRIMARY_REGIONS, CATEGORIES, RATINGS, STATUSES } from "../types/book";
+import { parseTags } from "./TagInput";
 
 export function FilterPanel() {
   const { filters, setFilters, books, allBooks } = useBookStore();
@@ -11,6 +12,16 @@ export function FilterPanel() {
   };
   const clear = () => setFilters({});
   const hasFilters = Object.values(filters).some((v) => v !== undefined);
+
+  const tagCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const b of allBooks) {
+      for (const tag of parseTags(b.tags ?? "[]")) {
+        map[tag] = (map[tag] ?? 0) + 1;
+      }
+    }
+    return map;
+  }, [allBooks]);
 
   const decades = useMemo(() => {
     const set = new Set<number>();
@@ -204,6 +215,23 @@ export function FilterPanel() {
               {d}s
             </GroupItem>
           ))}
+        </FilterGroup>
+      )}
+
+      {Object.keys(tagCounts).length > 0 && (
+        <FilterGroup label="标签">
+          {Object.entries(tagCounts)
+            .sort((a, b) => b[1] - a[1])
+            .map(([tag, count]) => (
+              <GroupItem
+                key={tag}
+                active={filters.tag === tag}
+                count={count}
+                onClick={() => update("tag", filters.tag === tag ? undefined : tag)}
+              >
+                {tag}
+              </GroupItem>
+            ))}
         </FilterGroup>
       )}
 

@@ -50,6 +50,9 @@ export interface BookFilters {
   category?: string;
   decade?: number;
   status?: string;
+  tag?: string;
+  limit?: number;
+  offset?: number;
 }
 
 export interface CreateBook {

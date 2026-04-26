@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
+import { useToastStore } from "../stores/toastStore";
 
 interface AppConfig {
   google_books_api_key?: string;
@@ -16,6 +18,7 @@ export function SettingsModal({ onClose }: Props) {
   const [saved, setSaved] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [showCookie, setShowCookie] = useState(false);
+  const { addToast } = useToastStore();
 
   useEffect(() => {
     invoke<AppConfig>("get_config").then(setConfig).catch(() => {});
@@ -23,6 +26,20 @@ export function SettingsModal({ onClose }: Props) {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
+
+  const handleExport = async (format: "json" | "csv") => {
+    const path = await save({
+      filters: [{ name: format.toUpperCase(), extensions: [format] }],
+      defaultPath: `bookshadow_export.${format}`,
+    });
+    if (!path) return;
+    try {
+      await invoke("export_books", { path, format });
+      addToast(`已导出 ${format.toUpperCase()}`);
+    } catch (err) {
+      addToast(String(err));
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -121,6 +138,24 @@ export function SettingsModal({ onClose }: Props) {
             <p className="text-xs text-gray-400">
               浏览器登录豆瓣后，打开开发者工具 → Network → 任意请求 → Headers → Cookie，复制完整值粘贴此处。
             </p>
+          </div>
+          <div className="border-t border-gray-100 pt-5 flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-gray-700">数据导出</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleExport("json")}
+                className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                导出 JSON
+              </button>
+              <button
+                onClick={() => handleExport("csv")}
+                className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                导出 CSV
+              </button>
+            </div>
+            <p className="text-xs text-gray-400">导出全部书籍数据，JSON 包含所有字段，CSV 适合在表格软件中查看。</p>
           </div>
         </div>
 

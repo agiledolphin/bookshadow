@@ -69,6 +69,9 @@ pub struct BookFilters {
     pub category: Option<String>,
     pub decade: Option<i32>,
     pub status: Option<String>,
+    pub tag: Option<String>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
 }
 
 pub const SELECT_COLS: &str =
@@ -114,6 +117,7 @@ pub fn get_books(
     if let Some(v) = f.region   { conditions.push(format!("region = ?{}", param_values.len() + 1));   param_values.push(Box::new(v)); }
     if let Some(v) = f.category { conditions.push(format!("category = ?{}", param_values.len() + 1)); param_values.push(Box::new(v)); }
     if let Some(v) = f.status   { conditions.push(format!("status = ?{}", param_values.len() + 1));   param_values.push(Box::new(v)); }
+    if let Some(v) = f.tag     { conditions.push(format!("tags LIKE ?{}", param_values.len() + 1));   param_values.push(Box::new(format!("%\"{}\"%" , v))); }
     if let Some(v) = f.decade {
         let from = format!("{}", v);
         let to   = format!("{}", v + 9);
@@ -128,10 +132,16 @@ pub fn get_books(
         format!("WHERE {}", conditions.join(" AND "))
     };
 
-    let sql = format!(
-        "SELECT {} FROM books {} ORDER BY created_at DESC",
-        SELECT_COLS, where_clause
-    );
+    let sql = match f.limit {
+        Some(lim) => format!(
+            "SELECT {} FROM books {} ORDER BY created_at DESC LIMIT {} OFFSET {}",
+            SELECT_COLS, where_clause, lim, f.offset.unwrap_or(0)
+        ),
+        None => format!(
+            "SELECT {} FROM books {} ORDER BY created_at DESC",
+            SELECT_COLS, where_clause
+        ),
+    };
 
     let param_refs: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;

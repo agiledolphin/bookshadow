@@ -13,17 +13,30 @@ import { Toast } from "./components/Toast";
 import "./App.css";
 
 export default function App() {
-  const { books, viewMode, loading, fetchBooks, refreshAllBooks, searchBooks, setViewMode, deleteBook } = useBookStore();
+  const { books, viewMode, loading, hasMore, isLoadingMore, fetchBooks, loadMoreBooks, refreshAllBooks, searchBooks, setViewMode, deleteBook } = useBookStore();
   const { addToast } = useToastStore();
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showBatchImport, setShowBatchImport] = useState(false);
   const [query, setQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchBooks();
     refreshAllBooks();
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "/") return;
+      const el = e.target as HTMLElement;
+      if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable) return;
+      e.preventDefault();
+      searchInputRef.current?.focus();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, []);
 
   const handleDelete = async (book: Book) => {
@@ -33,6 +46,22 @@ export default function App() {
       addToast(String(err));
     }
   };
+
+  // BookDetail ← / → navigation
+  useEffect(() => {
+    if (!selectedBook) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const el = e.target as HTMLElement;
+      if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable) return;
+      const idx = books.findIndex((b) => b.id === selectedBook.id);
+      if (idx === -1) return;
+      if (e.key === "ArrowLeft" && idx > 0) setSelectedBook(books[idx - 1]);
+      if (e.key === "ArrowRight" && idx < books.length - 1) setSelectedBook(books[idx + 1]);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedBook, books]);
 
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -63,6 +92,7 @@ export default function App() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
+              ref={searchInputRef}
               type="text"
               value={query}
               onChange={(e) => handleSearch(e.target.value)}
@@ -130,19 +160,24 @@ export default function App() {
               <span className="text-sm">加载中…</span>
             </div>
           ) : viewMode === "grid" ? (
-            <BookGrid books={books} onSelect={setSelectedBook} onDelete={handleDelete} />
+            <BookGrid books={books} hasMore={hasMore} isLoadingMore={isLoadingMore} onSelect={setSelectedBook} onDelete={handleDelete} onLoadMore={loadMoreBooks} />
           ) : (
-            <BookList books={books} onSelect={setSelectedBook} onDelete={handleDelete} />
+            <BookList books={books} hasMore={hasMore} isLoadingMore={isLoadingMore} onSelect={setSelectedBook} onDelete={handleDelete} onLoadMore={loadMoreBooks} />
           )}
         </main>
       </div>
 
-      {selectedBook && (
-        <BookDetail
-          book={selectedBook}
-          onClose={() => setSelectedBook(null)}
-        />
-      )}
+      {selectedBook && (() => {
+        const idx = books.findIndex((b) => b.id === selectedBook.id);
+        return (
+          <BookDetail
+            book={selectedBook}
+            onClose={() => setSelectedBook(null)}
+            onPrev={idx > 0 ? () => setSelectedBook(books[idx - 1]) : null}
+            onNext={idx < books.length - 1 ? () => setSelectedBook(books[idx + 1]) : null}
+          />
+        );
+      })()}
 
       {showForm && <BookForm onClose={() => { setShowForm(false); fetchBooks(); }} />}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}

@@ -1,15 +1,30 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Book } from "../types/book";
 
 interface Props {
   books: Book[];
+  hasMore: boolean;
+  isLoadingMore: boolean;
   onSelect: (book: Book) => void;
   onDelete: (book: Book) => void;
+  onLoadMore: () => void;
 }
 
-export function BookList({ books, onSelect, onDelete }: Props) {
+export function BookList({ books, hasMore, isLoadingMore, onSelect, onDelete, onLoadMore }: Props) {
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) onLoadMore(); },
+      { rootMargin: "200px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [onLoadMore]);
 
   const handleDeleteClick = (e: React.MouseEvent, book: Book) => {
     e.stopPropagation();
@@ -77,6 +92,13 @@ export function BookList({ books, onSelect, onDelete }: Props) {
           </div>
         );
       })}
+      <div ref={sentinelRef} className="h-px" />
+      {isLoadingMore && (
+        <div className="py-4 text-center text-sm text-gray-400">加载中…</div>
+      )}
+      {!hasMore && books.length > 0 && (
+        <div className="py-4 text-center text-xs text-gray-300">已加载全部 {books.length} 本</div>
+      )}
     </div>
   );
 }

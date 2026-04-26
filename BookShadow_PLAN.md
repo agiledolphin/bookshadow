@@ -235,7 +235,7 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 - [x] 重复书籍检测并提示跳过
 - [x] 导入进度实时显示，封面异步下载
 
-### Phase 8：体验优化 ✅（v0.4.0）
+### Phase 8：体验优化 ✅（v0.4.1）
 
 - [x] 批量导入：先打开面板，支持拖拽图片或点击选择（移除自动弹出文件对话框）
 - [x] BookDetail 内联编辑：查看与编辑在同一面板切换，ESC 退出编辑模式，保存后返回浏览界面
@@ -243,6 +243,15 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 - [x] 豆瓣作者国籍解析兼容全角方括号 `［国籍］`
 - [x] 新增类别：散文、诗歌
 - [x] 新增地域：秘鲁
+
+### Phase 9：标签、导航与导出 ✅（v0.5.0）
+
+- [x] 标签系统：书籍支持多标签，pill 式输入（Enter / 逗号添加，Backspace 删除），编辑时智能补全已有标签
+- [x] 按标签筛选：FilterPanel 底部动态显示全部标签，点击即筛选
+- [x] 分页加载：`get_books` / `search_books` 支持 limit/offset，滚动到底部自动加载（每页 40 条）
+- [x] 键盘快捷键：`/` 聚焦搜索框；`e`/`E` 进入编辑模式；`←`/`→` 在当前列表内切换书籍
+- [x] BookDetail 导航按钮：header 显示 ‹ › 箭头，浏览模式可见，编辑模式隐藏
+- [x] 数据导出：设置页新增「数据导出」分区，支持导出 JSON（全字段）和 CSV
 
 ---
 
@@ -263,7 +272,6 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 
 ## 八、后续可扩展方向
 
-- 数据导出（CSV / JSON）
 - iCloud / 本地 NAS 同步
 - 阅读进度追踪
 - 借阅记录
