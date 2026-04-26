@@ -4,11 +4,10 @@ import type { Book } from "../types/book";
 interface Props {
   books: Book[];
   onSelect: (book: Book) => void;
-  onEdit: (book: Book) => void;
   onDelete: (book: Book) => void;
 }
 
-export function BookList({ books, onSelect, onEdit, onDelete }: Props) {
+export function BookList({ books, onSelect, onDelete }: Props) {
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -65,15 +64,6 @@ export function BookList({ books, onSelect, onEdit, onDelete }: Props) {
               <p className="text-xs text-gray-400">{book.region ?? ""}</p>
             </div>
             <div className={`shrink-0 flex gap-1 transition-opacity ${confirming ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
-              <button
-                onClick={(e) => { e.stopPropagation(); onEdit(book); }}
-                title="编辑"
-                className="p-1.5 rounded text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors cursor-pointer"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H8v-2.414a2 2 0 01.586-1.414z" />
-                </svg>
-              </button>
               <button
                 onClick={(e) => handleDeleteClick(e, book)}
                 title={confirming ? "再次点击确认删除" : "删除"}

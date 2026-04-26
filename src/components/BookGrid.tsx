@@ -4,11 +4,10 @@ import { BookCard } from "./BookCard";
 interface Props {
   books: Book[];
   onSelect: (book: Book) => void;
-  onEdit: (book: Book) => void;
   onDelete: (book: Book) => void;
 }
 
-export function BookGrid({ books, onSelect, onEdit, onDelete }: Props) {
+export function BookGrid({ books, onSelect, onDelete }: Props) {
   if (books.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-gray-400">
@@ -26,7 +25,7 @@ export function BookGrid({ books, onSelect, onEdit, onDelete }: Props) {
     <div className="flex-1 overflow-y-auto min-h-0">
       <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-4 p-4">
         {books.map((book) => (
-          <BookCard key={book.id} book={book} onClick={() => onSelect(book)} onEdit={() => onEdit(book)} onDelete={() => onDelete(book)} />
+          <BookCard key={book.id} book={book} onClick={() => onSelect(book)} onDelete={() => onDelete(book)} />
         ))}
       </div>
     </div>

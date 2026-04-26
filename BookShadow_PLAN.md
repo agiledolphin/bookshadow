@@ -34,9 +34,9 @@ bookshadow/
 │   │   ├── BookGrid.tsx          # 网格视图
 │   │   ├── BookList.tsx          # 列表视图
 │   │   ├── BookCard.tsx          # 书籍卡片
-│   │   ├── BookForm.tsx          # 新增/编辑表单
-│   │   ├── BookDetail.tsx        # 书籍详情页
-│   │   ├── BatchImportModal.tsx  # 批量导入
+│   │   ├── BookForm.tsx          # 新增表单（仅新增）
+│   │   ├── BookDetail.tsx        # 书籍详情页（含内联编辑）
+│   │   ├── BatchImportModal.tsx  # 批量导入（拖拽或选择图片）
 │   │   ├── ReviewEditor.tsx      # Markdown 书评编辑器
 │   │   ├── FilterPanel.tsx       # 筛选面板
 │   │   ├── SettingsModal.tsx     # 设置
@@ -55,7 +55,7 @@ bookshadow/
 │   │   │   └── schema.rs         # DDL + migration
 │   │   ├── isbn/
 │   │   │   ├── mod.rs            # fetch_by_isbn 级联
-│   │   │   ├── douban.rs         # 豆瓣 HTML 抓取
+│   │   │   ├── douban.rs         # 豆瓣 HTML 抓取（支持 ISBN 和 subject URL）
 │   │   │   ├── google_books.rs   # Google Books API
 │   │   │   └── open_library.rs   # Open Library API
 │   │   ├── commands/
@@ -143,7 +143,7 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 | `update_book` | `id: i64, payload: UpdateBook` | `Book` | 更新 |
 | `delete_book` | `id: i64` | `()` | 删除（含本地封面） |
 | `download_cover` | `id, url, isbn` | `String` | 下载封面并更新 DB |
-| `fetch_by_isbn` | `isbn, source` | `BookMeta` | ISBN 元数据级联拉取 |
+| `fetch_by_isbn` | `isbn, source` | `BookMeta` | ISBN 或豆瓣链接元数据获取 |
 | `scan_isbn_image` | `path: String` | `ScanResult` | 条码识别 + 缩略图 |
 | `search_books` | `query: String` | `Vec<Book>` | FTS5 全文搜索 |
 
@@ -170,7 +170,7 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 
 按优先级顺序依次尝试：
 
-1. **豆瓣读书** — 中文书优先，HTML 抓取；需配置 Cookie 以绕过反爬
+1. **豆瓣读书** — 中文书优先，HTML 抓取；支持 ISBN 和 `book.douban.com/subject/` 直链两种输入；需配置 Cookie 以绕过反爬
 2. **Google Books API** — 外文书回退，支持配置 API Key
 3. **Open Library API** — 开放，无需 Key
 
@@ -191,7 +191,7 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 ### Phase 2：书籍 CRUD ✅
 
 - [x] Rust commands：create / get / update / delete book
-- [x] BookForm 组件（新增 / 编辑，含 ISBN 自动填充）
+- [x] BookForm 组件（新增，含 ISBN 自动填充）
 - [x] BookGrid 网格视图（封面卡片，骨架屏加载）
 - [x] BookList 列表视图
 - [x] 网格 / 列表视图切换
@@ -235,6 +235,15 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 - [x] 重复书籍检测并提示跳过
 - [x] 导入进度实时显示，封面异步下载
 
+### Phase 8：体验优化 ✅（v0.4.0）
+
+- [x] 批量导入：先打开面板，支持拖拽图片或点击选择（移除自动弹出文件对话框）
+- [x] BookDetail 内联编辑：查看与编辑在同一面板切换，ESC 退出编辑模式，保存后返回浏览界面
+- [x] ISBN 输入支持豆瓣 subject 直链，解决同一 ISBN 多条豆瓣记录问题
+- [x] 豆瓣作者国籍解析兼容全角方括号 `［国籍］`
+- [x] 新增类别：散文、诗歌
+- [x] 新增地域：秘鲁
+
 ---
 
 ## 七、关键设计决策
@@ -246,6 +255,9 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 | `data-tauri-drag-region` 需显式声明 `core:window:allow-start-dragging` | 不在 `core:default` 中，需手动加入 capabilities |
 | 豆瓣 Cookie 存 config.json | 避免硬编码，用户可自行更新过期 Cookie |
 | 批量导入扫码并行 + 抓取串行 | 扫码是本地 CPU 任务可并行；网络请求串行避免触发豆瓣频率限制 |
+| 豆瓣支持 subject URL 直链 | `/isbn/` 端点存在同 ISBN 多条记录时只返回一条，直链可精确指定版本 |
+| BookDetail 内联编辑 | 减少弹层嵌套，编辑时封面可见，书评区始终可访问 |
+| 全角括号 `extract_nationality_prefix` | 豆瓣不同页面混用 ASCII `[` 和全角 `［`，需同时兼容 |
 
 ---
 

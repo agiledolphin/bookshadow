@@ -40,6 +40,8 @@ export function BookForm({ book, onClose }: Props) {
   const [isbnSource, setIsbnSource] = useState<"douban" | "google" | "openlibrary" | "auto">("douban");
   const [fetching, setFetching] = useState(false);
   const [fetchError, setFetchError] = useState("");
+
+  const isDoubanUrl = /douban\.com\/subject\/\d+/.test(isbnInput.trim());
   const [saving, setSaving] = useState(false);
 
   const fetchIsbn = async () => {
@@ -47,9 +49,10 @@ export function BookForm({ book, onClose }: Props) {
     setFetching(true);
     setFetchError("");
     try {
+      const effectiveSource = isDoubanUrl ? "douban" : (isbnSource === "auto" ? null : isbnSource);
       const meta = await invoke<BookMeta>("fetch_by_isbn", {
         isbn: isbnInput.trim(),
-        source: isbnSource === "auto" ? null : isbnSource,
+        source: effectiveSource,
       });
       setForm((f) => ({
         ...f,
@@ -105,9 +108,9 @@ export function BookForm({ book, onClose }: Props) {
 
         {/* 可滚动表单区 */}
         <form id="book-form" onSubmit={handleSubmit} className="px-5 py-3 flex flex-col gap-3 overflow-y-auto flex-1">
-          {/* ISBN 快速填充 */}
+          {/* ISBN / 豆瓣链接 快速填充 */}
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">ISBN 自动填充</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">ISBN 或豆瓣链接</label>
             <div className="flex gap-2">
               <input
                 autoFocus
@@ -115,7 +118,7 @@ export function BookForm({ book, onClose }: Props) {
                 value={isbnInput}
                 onChange={(e) => setIsbnInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), fetchIsbn())}
-                placeholder="输入 ISBN 号码"
+                placeholder="ISBN 号码 或 book.douban.com/subject/…"
                 className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
               />
               <button
@@ -127,21 +130,25 @@ export function BookForm({ book, onClose }: Props) {
                 {fetching ? "获取中…" : "获取"}
               </button>
             </div>
-            <div className="flex gap-3 mt-1.5">
-              {(["douban", "google", "openlibrary", "auto"] as const).map((s) => (
-                <label key={s} className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer select-none">
-                  <input
-                    type="radio"
-                    name="isbnSource"
-                    value={s}
-                    checked={isbnSource === s}
-                    onChange={() => setIsbnSource(s)}
-                    className="accent-blue-500"
-                  />
-                  {s === "auto" ? "自动" : s === "douban" ? "豆瓣" : s === "google" ? "Google Books" : "Open Library"}
-                </label>
-              ))}
-            </div>
+            {isDoubanUrl ? (
+              <p className="text-xs text-blue-500 mt-1">检测到豆瓣链接，将直接抓取该页面</p>
+            ) : (
+              <div className="flex gap-3 mt-1.5">
+                {(["douban", "google", "openlibrary", "auto"] as const).map((s) => (
+                  <label key={s} className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer select-none">
+                    <input
+                      type="radio"
+                      name="isbnSource"
+                      value={s}
+                      checked={isbnSource === s}
+                      onChange={() => setIsbnSource(s)}
+                      className="accent-blue-500"
+                    />
+                    {s === "auto" ? "自动" : s === "douban" ? "豆瓣" : s === "google" ? "Google Books" : "Open Library"}
+                  </label>
+                ))}
+              </div>
+            )}
             {fetchError && <p className="text-xs text-red-500 mt-1">{fetchError}</p>}
           </div>
 

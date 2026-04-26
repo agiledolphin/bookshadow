@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { Book, BookMeta } from "../types/book";
 import { useBookStore } from "../stores/bookStore";
@@ -197,9 +198,14 @@ function RowItem({
 export function BatchImportModal({ onClose }: { onClose: () => void }) {
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [importing, setImporting] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const isbnMapRef = useRef<Map<string, Book>>(new Map());
-  const startedRef = useRef(false);
+  const rowsRef = useRef<ImportRow[]>([]);
+  const dragCounterRef = useRef(0);
   const { fetchBooks } = useBookStore();
+
+  // Keep rowsRef in sync for use inside event listeners
+  useEffect(() => { rowsRef.current = rows; }, [rows]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -229,8 +235,6 @@ export function BatchImportModal({ onClose }: { onClose: () => void }) {
     [updateRow]
   );
 
-  // Phase 1: scan barcode + generate thumbnail (parallel-safe, CPU-bound in Rust)
-  // Returns {id, isbn} if the row needs a metadata fetch, null otherwise
   const scanRow = useCallback(
     async (id: number, path: string): Promise<{ id: number; isbn: string } | null> => {
       try {
@@ -254,21 +258,12 @@ export function BatchImportModal({ onClose }: { onClose: () => void }) {
     [updateRow]
   );
 
-  useEffect(() => {
-    // Guard: only run once even if deps change (onClose is not memoized in App.tsx)
-    if (startedRef.current) return;
-    startedRef.current = true;
+  const processFiles = useCallback(
+    async (paths: string[]) => {
+      if (paths.length === 0) return;
 
-    invoke<Book[]>("get_books", { filters: {} }).then(books => {
+      const books = await invoke<Book[]>("get_books", { filters: {} });
       isbnMapRef.current = new Map(books.filter(b => b.isbn).map(b => [b.isbn!, b]));
-    });
-
-    open({
-      multiple: true,
-      filters: [{ name: "图片", extensions: ["jpg", "jpeg", "png", "webp"] }],
-    }).then(result => {
-      const paths = (result as string[] | null) ?? [];
-      if (paths.length === 0) { onClose(); return; }
 
       setRows(
         paths.map((p, i) => ({
@@ -286,21 +281,46 @@ export function BatchImportModal({ onClose }: { onClose: () => void }) {
         }))
       );
 
-      (async () => {
-        const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+      const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
-        // Phase 1: scan all images in parallel
-        const results = await Promise.all(paths.map((p, i) => scanRow(i, p)));
-        const fetchQueue = results.filter((x): x is { id: number; isbn: string } => x !== null);
+      // Phase 1: scan all images in parallel
+      const results = await Promise.all(paths.map((p, i) => scanRow(i, p)));
+      const fetchQueue = results.filter((x): x is { id: number; isbn: string } => x !== null);
 
-        // Phase 2: fetch metadata sequentially, 1.2s between requests
-        for (let i = 0; i < fetchQueue.length; i++) {
-          if (i > 0) await delay(1200);
-          await fetchMetaForRow(fetchQueue[i].id, fetchQueue[i].isbn);
-        }
-      })();
+      // Phase 2: fetch metadata sequentially, 1.2s between requests
+      for (let i = 0; i < fetchQueue.length; i++) {
+        if (i > 0) await delay(1200);
+        await fetchMetaForRow(fetchQueue[i].id, fetchQueue[i].isbn);
+      }
+    },
+    [scanRow, fetchMetaForRow]
+  );
+
+  // Listen for native file drops via Tauri window event (provides actual file paths)
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    listen<{ paths: string[] }>("tauri://drag-drop", event => {
+      dragCounterRef.current = 0;
+      setIsDragOver(false);
+      if (rowsRef.current.length > 0) return;
+      const imagePaths = event.payload.paths.filter(p =>
+        /\.(jpg|jpeg|png|webp)$/i.test(p)
+      );
+      if (imagePaths.length > 0) processFiles(imagePaths);
+    }).then(fn => { unlisten = fn; });
+
+    return () => { unlisten?.(); };
+  }, [processFiles]);
+
+  const handleSelectFiles = useCallback(async () => {
+    const result = await open({
+      multiple: true,
+      filters: [{ name: "图片", extensions: ["jpg", "jpeg", "png", "webp"] }],
     });
-  }, [onClose, scanRow, fetchMetaForRow]);
+    const paths = (result as string[] | null) ?? [];
+    if (paths.length > 0) processFiles(paths);
+  }, [processFiles]);
 
   const handleRetry = useCallback(
     async (id: number) => {
@@ -357,10 +377,9 @@ export function BatchImportModal({ onClose }: { onClose: () => void }) {
       }
     }
 
-    await fetchBooks(); // Show books immediately (covers may still be downloading)
+    await fetchBooks();
     setImporting(false);
 
-    // Refresh again once all covers have been downloaded to disk
     if (coverDownloads.length > 0) {
       Promise.all(coverDownloads).then(() => fetchBooks());
     }
@@ -379,6 +398,26 @@ export function BatchImportModal({ onClose }: { onClose: () => void }) {
       <div
         className="bg-white rounded-2xl shadow-2xl w-[600px] max-h-[80vh] flex flex-col"
         onClick={e => e.stopPropagation()}
+        onDragEnter={e => {
+          e.preventDefault();
+          if (rowsRef.current.length === 0) {
+            dragCounterRef.current++;
+            setIsDragOver(true);
+          }
+        }}
+        onDragOver={e => e.preventDefault()}
+        onDragLeave={e => {
+          e.preventDefault();
+          if (--dragCounterRef.current <= 0) {
+            dragCounterRef.current = 0;
+            setIsDragOver(false);
+          }
+        }}
+        onDrop={e => {
+          e.preventDefault();
+          dragCounterRef.current = 0;
+          setIsDragOver(false);
+        }}
       >
         {/* Header */}
         <div className="flex items-center px-5 py-4 border-b border-gray-100 shrink-0">
@@ -401,22 +440,48 @@ export function BatchImportModal({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-1.5 min-h-0">
+        <div className="flex-1 overflow-y-auto min-h-0">
           {rows.length === 0 ? (
-            <div className="flex items-center justify-center h-32 text-gray-400 text-sm gap-2">
-              <Spinner className="w-4 h-4 text-gray-400" />
-              选择图片中…
+            <div className={`m-4 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-4 py-16 transition-colors ${
+              isDragOver ? "border-blue-400 bg-blue-50" : "border-gray-200 bg-gray-50"
+            }`}>
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
+                isDragOver ? "bg-blue-100" : "bg-gray-100"
+              }`}>
+                <svg className={`w-7 h-7 transition-colors ${isDragOver ? "text-blue-500" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-medium text-gray-700">
+                  {isDragOver ? "松开鼠标开始导入" : "将书籍图片拖拽到此处"}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">支持 JPG、PNG、WebP 格式</p>
+              </div>
+              <div className="flex items-center gap-3 w-44">
+                <div className="flex-1 h-px bg-gray-200" />
+                <span className="text-xs text-gray-400">或</span>
+                <div className="flex-1 h-px bg-gray-200" />
+              </div>
+              <button
+                onClick={handleSelectFiles}
+                className="px-5 py-2.5 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors cursor-pointer"
+              >
+                选择图片
+              </button>
             </div>
           ) : (
-            rows.map(row => (
-              <RowItem
-                key={row.id}
-                row={row}
-                onToggle={() => updateRow(row.id, { selected: !row.selected })}
-                onManualIsbn={v => updateRow(row.id, { manualIsbn: v })}
-                onRetry={() => handleRetry(row.id)}
-              />
-            ))
+            <div className="p-3 space-y-1.5">
+              {rows.map(row => (
+                <RowItem
+                  key={row.id}
+                  row={row}
+                  onToggle={() => updateRow(row.id, { selected: !row.selected })}
+                  onManualIsbn={v => updateRow(row.id, { manualIsbn: v })}
+                  onRetry={() => handleRetry(row.id)}
+                />
+              ))}
+            </div>
           )}
         </div>
 

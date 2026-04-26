@@ -16,7 +16,6 @@ export default function App() {
   const { books, viewMode, loading, fetchBooks, refreshAllBooks, searchBooks, setViewMode, deleteBook } = useBookStore();
   const { addToast } = useToastStore();
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
-  const [editingBook, setEditingBook] = useState<Book | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showBatchImport, setShowBatchImport] = useState(false);
@@ -131,18 +130,20 @@ export default function App() {
               <span className="text-sm">加载中…</span>
             </div>
           ) : viewMode === "grid" ? (
-            <BookGrid books={books} onSelect={setSelectedBook} onEdit={setEditingBook} onDelete={handleDelete} />
+            <BookGrid books={books} onSelect={setSelectedBook} onDelete={handleDelete} />
           ) : (
-            <BookList books={books} onSelect={setSelectedBook} onEdit={setEditingBook} onDelete={handleDelete} />
+            <BookList books={books} onSelect={setSelectedBook} onDelete={handleDelete} />
           )}
         </main>
       </div>
 
       {selectedBook && (
-        <BookDetail book={selectedBook} onClose={() => setSelectedBook(null)} />
+        <BookDetail
+          book={selectedBook}
+          onClose={() => setSelectedBook(null)}
+        />
       )}
 
-      {editingBook && <BookForm book={editingBook} onClose={() => { setEditingBook(null); fetchBooks(); }} />}
       {showForm && <BookForm onClose={() => { setShowForm(false); fetchBooks(); }} />}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {showBatchImport && <BatchImportModal onClose={() => setShowBatchImport(false)} />}

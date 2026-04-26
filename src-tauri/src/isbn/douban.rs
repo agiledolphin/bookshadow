@@ -10,8 +10,23 @@ const SEL_INFO:   &str = "#info";
 const SEL_DESC:   &str = "#link-report .intro p, #link-report p";
 const SEL_RATING: &str = "strong[property='v:average']";
 
-pub async fn fetch(isbn: &str, cookie: Option<&str>) -> Result<BookMeta> {
-    let url = format!("https://book.douban.com/isbn/{}/", isbn);
+/// Resolve ISBN or Douban subject URL/ID to a fetchable URL.
+/// Accepts:
+///   - ISBN string         → https://book.douban.com/isbn/{isbn}/
+///   - Douban subject URL  → https://book.douban.com/subject/{id}/  (extracted from URL)
+fn resolve_url(isbn_or_url: &str) -> String {
+    if let Some(idx) = isbn_or_url.find("subject/") {
+        let after = &isbn_or_url[idx + 8..];
+        let id = after.trim_end_matches('/').split('/').next().unwrap_or("");
+        if !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()) {
+            return format!("https://book.douban.com/subject/{}/", id);
+        }
+    }
+    format!("https://book.douban.com/isbn/{}/", isbn_or_url)
+}
+
+pub async fn fetch(isbn_or_url: &str, cookie: Option<&str>) -> Result<BookMeta> {
+    let url = resolve_url(isbn_or_url);
 
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
@@ -85,6 +100,16 @@ pub async fn fetch(isbn: &str, cookie: Option<&str>) -> Result<BookMeta> {
         .collect::<Vec<_>>()
         .join("\n\n");
 
+    // Prefer ISBN parsed from the page; fall back to the parameter if it looks like an ISBN
+    let isbn_val = fields.get("ISBN").cloned().or_else(|| {
+        let s = isbn_or_url.trim();
+        if s.chars().all(|c| c.is_ascii_digit()) && (s.len() == 10 || s.len() == 13) {
+            Some(s.to_string())
+        } else {
+            None
+        }
+    });
+
     Ok(BookMeta {
         title,
         author,
@@ -96,7 +121,7 @@ pub async fn fetch(isbn: &str, cookie: Option<&str>) -> Result<BookMeta> {
         language: Some("中文".to_string()),
         region,
         category: None,
-        isbn: Some(isbn.to_string()),
+        isbn: isbn_val,
         rating,
     })
 }
@@ -205,16 +230,20 @@ fn strip_nationality(s: &str) -> String {
         .join(" / ")
 }
 
-/// 识别 `[国籍] 姓名` 或 `(国籍) 姓名` 前缀，返回 (缩写, 姓名)
+/// 识别 `[国籍] 姓名`、`(国籍) 姓名`、`［国籍］姓名`、`（国籍）姓名` 前缀，返回 (缩写, 姓名)
+/// 豆瓣不同页面混用 ASCII 和全角括号，需全部兼容
 fn extract_nationality_prefix(s: &str) -> Option<(&str, &str)> {
     let s = s.trim();
-    let (open, close) = if s.starts_with('[') { ('[', ']') }
-                        else if s.starts_with('(') { ('(', ')') }
-                        else { return None; };
+    let (open, close): (&str, &str) =
+        if s.starts_with('[')  { ("[",  "]")  }
+        else if s.starts_with('(')  { ("(",  ")")  }
+        else if s.starts_with('［') { ("［", "］") }
+        else if s.starts_with('（') { ("（", "）") }
+        else { return None; };
     let inner = s.strip_prefix(open)?;
     let end = inner.find(close)?;
     let abbr = inner[..end].trim();
-    let name = inner[end + 1..].trim();
+    let name = inner[end + close.len()..].trim();
     Some((abbr, name))
 }
 
@@ -251,6 +280,7 @@ fn nationality_to_region(abbr: &str) -> Option<String> {
         "阿根廷"                        => "阿根廷",
         "巴西"                          => "巴西",
         "墨" | "墨西哥"                  => "墨西哥",
+        "秘" | "秘鲁"                   => "秘鲁",
         "爱尔兰"                        => "爱尔兰",
         "以色列"                        => "以色列",
         "土" | "土耳其"                  => "土耳其",
