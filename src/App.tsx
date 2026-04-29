@@ -13,7 +13,7 @@ import { Toast } from "./components/Toast";
 import "./App.css";
 
 export default function App() {
-  const { books, viewMode, loading, hasMore, isLoadingMore, fetchBooks, loadMoreBooks, refreshAllBooks, searchBooks, setViewMode, deleteBook } = useBookStore();
+  const { books, filters, viewMode, loading, hasMore, isLoadingMore, fetchBooks, loadMoreBooks, refreshAllBooks, searchBooks, setViewMode, setSortBy, deleteBook } = useBookStore();
   const { addToast } = useToastStore();
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -34,6 +34,7 @@ export default function App() {
       if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable) return;
       e.preventDefault();
       searchInputRef.current?.focus();
+      searchInputRef.current?.select();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -96,10 +97,24 @@ export default function App() {
               type="text"
               value={query}
               onChange={(e) => handleSearch(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Escape") handleSearch(""); }}
               placeholder="搜索书名、作者、简介…"
               className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
           </div>
+
+          <select
+            value={filters.sort_by ?? "created_at_desc"}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400 cursor-pointer"
+          >
+            <option value="created_at_desc">加入时间 ↓</option>
+            <option value="created_at_asc">加入时间 ↑</option>
+            <option value="title_asc">书名</option>
+            <option value="pub_date_desc">出版年份 新→旧</option>
+            <option value="pub_date_asc">出版年份 旧→新</option>
+            <option value="rating_desc">评分 高→低</option>
+          </select>
 
           <div className="flex items-center gap-1 border border-gray-200 rounded-lg p-0.5">
             <button

@@ -1,10 +1,27 @@
 import { useState, useMemo } from "react";
 import { useBookStore } from "../stores/bookStore";
 import { LANGUAGES, PRIMARY_REGIONS, CATEGORIES, RATINGS, STATUSES } from "../types/book";
+import type { Book, BookFilters } from "../types/book";
 import { parseTags } from "./TagInput";
 
+function matchesFilters(book: Book, f: BookFilters): boolean {
+  if (f.status   !== undefined && book.status   !== f.status)   return false;
+  if (f.region   !== undefined && book.region   !== f.region)   return false;
+  if (f.category !== undefined && book.category !== f.category) return false;
+  if (f.language !== undefined && book.language !== f.language) return false;
+  if (f.rating   !== undefined && (book.rating ?? 0) < f.rating) return false;
+  if (f.decade   !== undefined) {
+    const y = parseInt(book.pub_date?.slice(0, 4) ?? "");
+    if (isNaN(y) || Math.floor(y / 10) * 10 !== f.decade) return false;
+  }
+  if (f.tag !== undefined) {
+    if (!parseTags(book.tags ?? "[]").includes(f.tag)) return false;
+  }
+  return true;
+}
+
 export function FilterPanel() {
-  const { filters, setFilters, books, allBooks } = useBookStore();
+  const { filters, setFilters, allBooks } = useBookStore();
   const [otherOpen, setOtherOpen] = useState(false);
 
   const update = (key: string, value: string | number | undefined) => {
@@ -13,57 +30,46 @@ export function FilterPanel() {
   const clear = () => setFilters({});
   const hasFilters = Object.values(filters).some((v) => v !== undefined);
 
-  const tagCounts = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const b of allBooks) {
-      for (const tag of parseTags(b.tags ?? "[]")) {
-        map[tag] = (map[tag] ?? 0) + 1;
-      }
-    }
-    return map;
-  }, [allBooks]);
-
-  const decades = useMemo(() => {
-    const set = new Set<number>();
-    for (const b of allBooks) {
-      if (b.pub_date) {
-        const y = parseInt(b.pub_date.slice(0, 4));
-        if (!isNaN(y)) set.add(Math.floor(y / 10) * 10);
-      }
-    }
-    return Array.from(set).sort((a, b) => b - a);
-  }, [allBooks]);
-
   const otherRegions = useMemo(() => {
     const primarySet = new Set<string>(PRIMARY_REGIONS);
     const seen = new Set<string>();
-    for (const b of books) {
+    for (const b of allBooks) {
       if (b.region && !primarySet.has(b.region)) seen.add(b.region);
     }
     return Array.from(seen).sort();
-  }, [books]);
+  }, [allBooks]);
 
-  // counts always derived from full unfiltered library
+  // 联动计数：每个维度的数字只统计满足"其他所有已选条件"的书籍
   const counts = useMemo(() => {
     const region: Record<string, number> = {};
     const category: Record<string, number> = {};
     const language: Record<string, number> = {};
     const rating: Record<number, number> = {};
     const status: Record<string, number> = {};
+    const tag: Record<string, number> = {};
+    const decadeSet = new Set<number>();
+
     for (const b of allBooks) {
-      if (b.region)   region[b.region]     = (region[b.region]     ?? 0) + 1;
-      if (b.category) category[b.category] = (category[b.category] ?? 0) + 1;
-      if (b.language) language[b.language] = (language[b.language] ?? 0) + 1;
-      if (b.status)   status[b.status]     = (status[b.status]     ?? 0) + 1;
-      if (b.rating) {
-        // rating filter is >=, so count accumulates downward
-        for (let r = 1; r <= b.rating; r++) {
-          rating[r] = (rating[r] ?? 0) + 1;
-        }
+      const ex = (dim: keyof BookFilters) => matchesFilters(b, { ...filters, [dim]: undefined });
+
+      if (ex("status")   && b.status)   status[b.status]     = (status[b.status]     ?? 0) + 1;
+      if (ex("region")   && b.region)   region[b.region]     = (region[b.region]     ?? 0) + 1;
+      if (ex("category") && b.category) category[b.category] = (category[b.category] ?? 0) + 1;
+      if (ex("language") && b.language) language[b.language] = (language[b.language] ?? 0) + 1;
+      if (ex("rating")   && b.rating) {
+        for (let r = 1; r <= b.rating; r++) rating[r] = (rating[r] ?? 0) + 1;
+      }
+      if (ex("tag")) {
+        for (const t of parseTags(b.tags ?? "[]")) tag[t] = (tag[t] ?? 0) + 1;
+      }
+      if (ex("decade") && b.pub_date) {
+        const y = parseInt(b.pub_date.slice(0, 4));
+        if (!isNaN(y)) decadeSet.add(Math.floor(y / 10) * 10);
       }
     }
-    return { region, category, language, rating, status };
-  }, [allBooks]);
+    const decades = Array.from(decadeSet).sort((a, b) => b - a);
+    return { region, category, language, rating, status, tag, decades };
+  }, [allBooks, filters]);
 
   const activeRegionIsOther =
     filters.region !== undefined &&
@@ -204,9 +210,9 @@ export function FilterPanel() {
         ))}
       </FilterGroup>
 
-      {decades.length > 0 && (
+      {counts.decades.length > 0 && (
         <FilterGroup label="年代">
-          {decades.map((d) => (
+          {counts.decades.map((d) => (
             <GroupItem
               key={d}
               active={filters.decade === d}
@@ -218,9 +224,9 @@ export function FilterPanel() {
         </FilterGroup>
       )}
 
-      {Object.keys(tagCounts).length > 0 && (
+      {Object.keys(counts.tag).length > 0 && (
         <FilterGroup label="标签">
-          {Object.entries(tagCounts)
+          {Object.entries(counts.tag)
             .sort((a, b) => b[1] - a[1])
             .map(([tag, count]) => (
               <GroupItem

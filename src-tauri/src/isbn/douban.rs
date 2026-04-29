@@ -230,20 +230,25 @@ fn strip_nationality(s: &str) -> String {
         .join(" / ")
 }
 
-/// 识别 `[国籍] 姓名`、`(国籍) 姓名`、`［国籍］姓名`、`（国籍）姓名` 前缀，返回 (缩写, 姓名)
-/// 豆瓣不同页面混用 ASCII 和全角括号，需全部兼容
+/// 识别 `[国籍] 姓名`、`(国籍) 姓名`、`［国籍］姓名`、`（国籍）姓名`、`【国籍】姓名` 前缀，返回 (缩写, 姓名)
+/// 豆瓣不同页面混用 ASCII、全角和黑角括号，且开闭括号可能不同类型，统一用任意闭括号匹配
 fn extract_nationality_prefix(s: &str) -> Option<(&str, &str)> {
     let s = s.trim();
-    let (open, close): (&str, &str) =
-        if s.starts_with('[')  { ("[",  "]")  }
-        else if s.starts_with('(')  { ("(",  ")")  }
-        else if s.starts_with('［') { ("［", "］") }
-        else if s.starts_with('（') { ("（", "）") }
+    let open: &str =
+        if s.starts_with('[')  { "[" }
+        else if s.starts_with('(')  { "(" }
+        else if s.starts_with('［') { "［" }
+        else if s.starts_with('（') { "（" }
+        else if s.starts_with('【') { "【" }
         else { return None; };
     let inner = s.strip_prefix(open)?;
-    let end = inner.find(close)?;
+    // 搜索最先出现的任意闭括号（开闭可能不同类型）
+    let closes = ["]", ")", "］", "）", "】"];
+    let (end, close_len) = closes.iter()
+        .filter_map(|c| inner.find(c).map(|pos| (pos, c.len())))
+        .min_by_key(|&(pos, _)| pos)?;
     let abbr = inner[..end].trim();
-    let name = inner[end + close.len()..].trim();
+    let name = inner[end + close_len..].trim();
     Some((abbr, name))
 }
 
@@ -286,10 +291,12 @@ fn nationality_to_region(abbr: &str) -> Option<String> {
         "土" | "土耳其"                  => "土耳其",
         "埃" | "埃及"                   => "埃及",
         "南非"                          => "南非",
+        "尼" | "尼日利亚"               => "尼日利亚",
         "新西兰"                        => "新西兰",
         "新加坡"                        => "新加坡",
         "泰" | "泰国"                   => "泰国",
         "越" | "越南"                   => "越南",
+        "缅" | "缅甸"                   => "缅甸",
         _ => return None,
     };
     Some(region.to_string())

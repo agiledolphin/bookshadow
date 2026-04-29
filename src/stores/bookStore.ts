@@ -27,6 +27,7 @@ interface BookStore {
   updateBook: (id: number, payload: UpdateBook) => Promise<Book>;
   deleteBook: (id: number) => Promise<void>;
   setFilters: (filters: BookFilters) => void;
+  setSortBy: (sortBy: string) => void;
   setViewMode: (mode: ViewMode) => void;
 
   fetchReviews: (bookId: number) => Promise<void>;
@@ -107,6 +108,7 @@ export const useBookStore = create<BookStore>((set, get) => ({
         query,
         limit: PAGE_SIZE,
         offset,
+        sort_by: get().filters.sort_by ?? null,
       });
       set((s) => ({
         books: reset ? newBooks : [...s.books, ...newBooks],
@@ -175,6 +177,16 @@ export const useBookStore = create<BookStore>((set, get) => ({
   setFilters: (filters) => {
     set({ filters });
     get().fetchBooks(true);
+  },
+
+  setSortBy: (sortBy) => {
+    set((s) => ({ filters: { ...s.filters, sort_by: sortBy } }));
+    const { searchQuery } = get();
+    if (searchQuery.trim()) {
+      get().searchBooks(searchQuery, true);
+    } else {
+      get().fetchBooks(true);
+    }
   },
 
   setViewMode: (mode) => set({ viewMode: mode }),

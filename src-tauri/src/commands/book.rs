@@ -72,6 +72,18 @@ pub struct BookFilters {
     pub tag: Option<String>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+    pub sort_by: Option<String>,
+}
+
+pub fn resolve_order_by(sort_by: Option<&str>) -> &'static str {
+    match sort_by {
+        Some("created_at_asc") => "created_at ASC",
+        Some("title_asc")      => "title ASC",
+        Some("pub_date_desc")  => "pub_date DESC",
+        Some("pub_date_asc")   => "pub_date ASC",
+        Some("rating_desc")    => "COALESCE(rating, 0) DESC",
+        _                      => "created_at DESC",
+    }
 }
 
 pub const SELECT_COLS: &str =
@@ -132,14 +144,15 @@ pub fn get_books(
         format!("WHERE {}", conditions.join(" AND "))
     };
 
+    let order_by = resolve_order_by(f.sort_by.as_deref());
     let sql = match f.limit {
         Some(lim) => format!(
-            "SELECT {} FROM books {} ORDER BY created_at DESC LIMIT {} OFFSET {}",
-            SELECT_COLS, where_clause, lim, f.offset.unwrap_or(0)
+            "SELECT {} FROM books {} ORDER BY {} LIMIT {} OFFSET {}",
+            SELECT_COLS, where_clause, order_by, lim, f.offset.unwrap_or(0)
         ),
         None => format!(
-            "SELECT {} FROM books {} ORDER BY created_at DESC",
-            SELECT_COLS, where_clause
+            "SELECT {} FROM books {} ORDER BY {}",
+            SELECT_COLS, where_clause, order_by
         ),
     };
 

@@ -253,6 +253,16 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 - [x] BookDetail 导航按钮：header 显示 ‹ › 箭头，浏览模式可见，编辑模式隐藏
 - [x] 数据导出：设置页新增「数据导出」分区，支持导出 JSON（全字段）和 CSV
 
+### Phase 10：体验细节打磨 ✅（v0.5.1 / v0.5.2）
+
+- [x] 书籍排序：工具栏排序下拉，支持加入时间↓↑、书名、出版年份新→旧/旧→新、评分高→低
+- [x] 筛选联动计数：FilterPanel 各维度数字根据当前已选条件动态更新，避免点击后无结果的歧义
+- [x] 搜索框交互：`/` 聚焦时全选已有内容；ESC 清空搜索
+- [x] 豆瓣国籍解析：新增 `【国籍】` 黑角括号支持；兼容开闭括号混用（如 `[ 日］`）
+- [x] 新增类别：语言、政治、市场
+- [x] 新增地域：尼日利亚、缅甸
+- [x] Vite 构建拆分 CodeMirror chunk，消除大包警告
+
 ---
 
 ## 七、关键设计决策
@@ -266,7 +276,9 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 | 批量导入扫码并行 + 抓取串行 | 扫码是本地 CPU 任务可并行；网络请求串行避免触发豆瓣频率限制 |
 | 豆瓣支持 subject URL 直链 | `/isbn/` 端点存在同 ISBN 多条记录时只返回一条，直链可精确指定版本 |
 | BookDetail 内联编辑 | 减少弹层嵌套，编辑时封面可见，书评区始终可访问 |
-| 全角括号 `extract_nationality_prefix` | 豆瓣不同页面混用 ASCII `[` 和全角 `［`，需同时兼容 |
+| `extract_nationality_prefix` 兼容多种括号 | 豆瓣页面混用 ASCII `[`、全角 `［`、黑角 `【` 及开闭混搭，统一搜索任意闭括号 |
+| 筛选联动计数 | 每个维度的数字排除自身过滤条件，对其余条件过滤后统计，消除"点击后无结果"歧义 |
+| Vite `manualChunks` 拆分 CodeMirror | CodeMirror 固有体积约 600 KB，单独拆出避免主 chunk 超限警告 |
 
 ---
 
