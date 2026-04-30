@@ -23,6 +23,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             cover_local TEXT,
             description TEXT,
             translator  TEXT,
+            status      TEXT,
             created_at  TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
         );
@@ -58,61 +59,10 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             INSERT INTO books_fts(books_fts, rowid, title, author, description, tags)
             VALUES ('delete', old.id, old.title, COALESCE(old.author,''), COALESCE(old.description,''), COALESCE(old.tags,''));
         END;
+
+        PRAGMA user_version = 2;
         "#,
     )?;
-
-    // v0→v1: 列迁移
-    let _ = conn.execute_batch("ALTER TABLE books ADD COLUMN translator TEXT;");
-    let _ = conn.execute_batch("ALTER TABLE books ADD COLUMN pub_date TEXT;");
-    let _ = conn.execute_batch(
-        "UPDATE books SET pub_date = CAST(pub_year AS TEXT) WHERE pub_year IS NOT NULL AND pub_date IS NULL;"
-    );
-
-    // v1→v2: 重建 FTS 为 trigram tokenizer（支持中文子串搜索）
-    // 用 user_version 标记，避免每次启动都重建
-    let user_version: i32 = conn
-        .query_row("PRAGMA user_version", [], |r| r.get(0))
-        .unwrap_or(0);
-
-    let _ = conn.execute_batch("ALTER TABLE books ADD COLUMN status TEXT;");
-
-    if user_version < 2 {
-        conn.execute_batch(
-            r#"
-            DROP TRIGGER IF EXISTS books_ai;
-            DROP TRIGGER IF EXISTS books_au;
-            DROP TRIGGER IF EXISTS books_ad;
-            DROP TABLE IF EXISTS books_fts;
-
-            CREATE VIRTUAL TABLE books_fts USING fts5(
-                title, author, description, tags,
-                content='books', content_rowid='id',
-                tokenize='trigram'
-            );
-
-            CREATE TRIGGER books_ai AFTER INSERT ON books BEGIN
-                INSERT INTO books_fts(rowid, title, author, description, tags)
-                VALUES (new.id, new.title, COALESCE(new.author,''), COALESCE(new.description,''), COALESCE(new.tags,''));
-            END;
-            CREATE TRIGGER books_au AFTER UPDATE ON books BEGIN
-                INSERT INTO books_fts(books_fts, rowid, title, author, description, tags)
-                VALUES ('delete', old.id, old.title, COALESCE(old.author,''), COALESCE(old.description,''), COALESCE(old.tags,''));
-                INSERT INTO books_fts(rowid, title, author, description, tags)
-                VALUES (new.id, new.title, COALESCE(new.author,''), COALESCE(new.description,''), COALESCE(new.tags,''));
-            END;
-            CREATE TRIGGER books_ad AFTER DELETE ON books BEGIN
-                INSERT INTO books_fts(books_fts, rowid, title, author, description, tags)
-                VALUES ('delete', old.id, old.title, COALESCE(old.author,''), COALESCE(old.description,''), COALESCE(old.tags,''));
-            END;
-
-            INSERT INTO books_fts(rowid, title, author, description, tags)
-                SELECT id, title, COALESCE(author,''), COALESCE(description,''), COALESCE(tags,'')
-                FROM books;
-
-            PRAGMA user_version = 2;
-            "#,
-        )?;
-    }
 
     Ok(())
 }
