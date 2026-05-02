@@ -16,6 +16,7 @@ interface BookStore {
   isLoadingMore: boolean;
   hasMore: boolean;
   error: string | null;
+  coverNonce: Record<number, number>;
 
   // actions
   fetchBooks: (reset?: boolean) => Promise<void>;
@@ -23,6 +24,7 @@ interface BookStore {
   refreshAllBooks: () => Promise<void>;
   searchBooks: (query: string, reset?: boolean) => Promise<void>;
   selectBook: (book: Book | null) => void;
+  patchBook: (id: number, patch: Partial<Book>) => void;
   createBook: (payload: CreateBook) => Promise<Book>;
   updateBook: (id: number, payload: UpdateBook) => Promise<Book>;
   deleteBook: (id: number) => Promise<void>;
@@ -41,6 +43,7 @@ export const useBookStore = create<BookStore>((set, get) => ({
   books: [],
   allBooks: [],
   selectedBook: null,
+  coverNonce: {},
   reviews: [],
   filters: {},
   searchQuery: "",
@@ -123,17 +126,28 @@ export const useBookStore = create<BookStore>((set, get) => ({
 
   selectBook: (book) => set({ selectedBook: book }),
 
+  patchBook: (id, patch) => set((s) => ({
+    books: s.books.map((b) => b.id === id ? { ...b, ...patch } : b),
+    allBooks: s.allBooks.map((b) => b.id === id ? { ...b, ...patch } : b),
+    selectedBook: s.selectedBook?.id === id ? { ...s.selectedBook, ...patch } : s.selectedBook,
+    coverNonce: patch.cover_local !== undefined
+      ? { ...s.coverNonce, [id]: Date.now() }
+      : s.coverNonce,
+  })),
+
   createBook: async (payload) => {
     const book = await invoke<Book>("create_book", { payload });
     set((s) => ({ books: [book, ...s.books], allBooks: [book, ...s.allBooks] }));
-    if (book.cover_url && !book.cover_local) {
+    if (book.cover_url) {
       invoke<string>("download_cover", { id: book.id, url: book.cover_url, isbn: book.isbn ?? null })
         .then((localPath) => {
           set((s) => {
             const updated = { ...book, cover_local: localPath };
             return {
               books: s.books.map((b) => (b.id === book.id ? updated : b)),
+              allBooks: s.allBooks.map((b) => (b.id === book.id ? updated : b)),
               selectedBook: s.selectedBook?.id === book.id ? updated : s.selectedBook,
+              coverNonce: { ...s.coverNonce, [book.id]: Date.now() },
             };
           });
         })
@@ -149,14 +163,16 @@ export const useBookStore = create<BookStore>((set, get) => ({
       allBooks: s.allBooks.map((b) => (b.id === id ? book : b)),
       selectedBook: s.selectedBook?.id === id ? book : s.selectedBook,
     }));
-    if (book.cover_url && !book.cover_local) {
+    if (book.cover_url) {
       invoke<string>("download_cover", { id: book.id, url: book.cover_url, isbn: book.isbn ?? null })
         .then((localPath) => {
           set((s) => {
             const updated = { ...book, cover_local: localPath };
             return {
               books: s.books.map((b) => (b.id === id ? updated : b)),
+              allBooks: s.allBooks.map((b) => (b.id === id ? updated : b)),
               selectedBook: s.selectedBook?.id === id ? updated : s.selectedBook,
+              coverNonce: { ...s.coverNonce, [id]: Date.now() },
             };
           });
         })

@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useBookStore } from "../stores/bookStore";
-import { LANGUAGES, PRIMARY_REGIONS, CATEGORIES, RATINGS, STATUSES } from "../types/book";
+import { LANGUAGES, PRIMARY_REGIONS, PRIMARY_CATEGORIES, RATINGS, STATUSES } from "../types/book";
 import type { Book, BookFilters } from "../types/book";
 import { parseTags } from "./TagInput";
 
@@ -23,6 +23,7 @@ function matchesFilters(book: Book, f: BookFilters): boolean {
 export function FilterPanel() {
   const { filters, setFilters, allBooks } = useBookStore();
   const [otherOpen, setOtherOpen] = useState(false);
+  const [otherCategoryOpen, setOtherCategoryOpen] = useState(false);
 
   const update = (key: string, value: string | number | undefined) => {
     setFilters({ ...filters, [key]: value });
@@ -35,6 +36,15 @@ export function FilterPanel() {
     const seen = new Set<string>();
     for (const b of allBooks) {
       if (b.region && !primarySet.has(b.region)) seen.add(b.region);
+    }
+    return Array.from(seen).sort();
+  }, [allBooks]);
+
+  const otherCategories = useMemo(() => {
+    const primarySet = new Set<string>(PRIMARY_CATEGORIES);
+    const seen = new Set<string>();
+    for (const b of allBooks) {
+      if (b.category && !primarySet.has(b.category)) seen.add(b.category);
     }
     return Array.from(seen).sort();
   }, [allBooks]);
@@ -74,6 +84,10 @@ export function FilterPanel() {
   const activeRegionIsOther =
     filters.region !== undefined &&
     !(PRIMARY_REGIONS as readonly string[]).includes(filters.region);
+
+  const activeCategoryIsOther =
+    filters.category !== undefined &&
+    !(PRIMARY_CATEGORIES as readonly string[]).includes(filters.category);
 
   return (
     <aside className="w-36 shrink-0 flex flex-col border-r border-gray-100 bg-white">
@@ -185,7 +199,7 @@ export function FilterPanel() {
       </FilterGroup>
 
       <FilterGroup label="类别">
-        {CATEGORIES.map((c) => (
+        {PRIMARY_CATEGORIES.map((c) => (
           <GroupItem
             key={c}
             active={filters.category === c}
@@ -195,6 +209,38 @@ export function FilterPanel() {
             {c}
           </GroupItem>
         ))}
+
+        {(otherCategories.length > 0 || activeCategoryIsOther) && (
+          <div>
+            <button
+              onClick={() => setOtherCategoryOpen((o) => !o)}
+              className={`w-full text-left px-3 py-1.5 text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                activeCategoryIsOther
+                  ? "bg-blue-100 text-blue-700 font-medium"
+                  : "text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+              }`}
+            >
+              <span>其他</span>
+              <span className="text-[10px]">{otherCategoryOpen ? "▴" : "▾"}</span>
+            </button>
+
+            {otherCategoryOpen && otherCategories.length > 0 && (
+              <div className="bg-gray-50 border-t border-gray-100">
+                {otherCategories.map((c) => (
+                  <GroupItem
+                    key={c}
+                    active={filters.category === c}
+                    count={counts.category[c] ?? 0}
+                    onClick={() => update("category", filters.category === c ? undefined : c)}
+                    indent
+                  >
+                    {c}
+                  </GroupItem>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </FilterGroup>
 
       <FilterGroup label="语言">

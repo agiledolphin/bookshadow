@@ -342,3 +342,36 @@ pub async fn download_cover(
 
     Ok(path_str)
 }
+
+#[tauri::command]
+pub fn upload_cover(state: State<'_, DbState>, id: i64, src_path: String) -> Result<String, String> {
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+
+    let isbn: Option<String> = conn
+        .query_row("SELECT isbn FROM books WHERE id=?1", params![id], |row| row.get(0))
+        .unwrap_or(None);
+
+    let src = std::path::Path::new(&src_path);
+    let ext = src
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("jpg")
+        .to_lowercase();
+
+    let stem = match isbn.as_deref().filter(|s| !s.trim().is_empty()) {
+        Some(s) => format!("{}_{}", id, s.trim()),
+        None    => id.to_string(),
+    };
+    let dest = data_dir().join("covers").join(format!("{}.{}", stem, ext));
+
+    std::fs::copy(src, &dest).map_err(|e| format!("复制图片失败: {}", e))?;
+
+    let dest_str = dest.to_string_lossy().to_string();
+    conn.execute(
+        "UPDATE books SET cover_local=?1, cover_url=NULL, updated_at=datetime('now') WHERE id=?2",
+        params![dest_str, id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(dest_str)
+}

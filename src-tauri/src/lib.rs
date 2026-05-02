@@ -103,6 +103,7 @@ pub fn run() {
                     tauri::http::Response::builder()
                         .status(200)
                         .header("Content-Type", ct)
+                        .header("Cache-Control", "no-store")
                         .body(bytes)
                         .unwrap()
                 }
@@ -123,6 +124,7 @@ pub fn run() {
             commands::book::update_book,
             commands::book::delete_book,
             commands::book::download_cover,
+            commands::book::upload_cover,
             commands::review::get_reviews,
             commands::review::create_review,
             commands::review::update_review,

@@ -1,9 +1,10 @@
 import { useRef, useState, useEffect } from "react";
 import type { Book } from "../types/book";
+import { useBookStore } from "../stores/bookStore";
 
-function localCoverSrc(path: string): string {
+function localCoverSrc(path: string, nonce?: number): string {
   const filename = path.split("/").pop() ?? "";
-  return `bookcover://localhost/${filename}`;
+  return `bookcover://localhost/${filename}${nonce ? `?v=${nonce}` : ""}`;
 }
 
 interface Props {
@@ -16,8 +17,9 @@ export function BookCard({ book, onClick, onDelete }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nonce = useBookStore((s) => s.coverNonce[book.id]);
 
-  useEffect(() => { setImgLoaded(false); }, [book.cover_local]);
+  useEffect(() => { setImgLoaded(false); }, [book.cover_local, nonce]);
 
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -43,8 +45,8 @@ export function BookCard({ book, onClick, onDelete }: Props) {
               <div className="absolute inset-0 bg-gray-200 animate-pulse" />
             )}
             <img
-              key={book.cover_local}
-              src={localCoverSrc(book.cover_local)}
+              key={`${book.cover_local}-${nonce}`}
+              src={localCoverSrc(book.cover_local, nonce)}
               alt={book.title}
               className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${imgLoaded ? "opacity-100" : "opacity-0"}`}
               loading="lazy"

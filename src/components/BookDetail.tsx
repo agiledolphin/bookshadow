@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import type { Book, BookMeta, CreateBook } from "../types/book";
 import { STATUSES, LANGUAGES, REGIONS, CATEGORIES } from "../types/book";
 import { useBookStore } from "../stores/bookStore";
@@ -8,9 +9,9 @@ import { StarRating } from "./StarRating";
 import { TagInput, parseTags } from "./TagInput";
 import { ReviewEditor } from "./ReviewEditor";
 
-function localCoverSrc(path: string): string {
+function localCoverSrc(path: string, v = 0): string {
   const filename = path.split("/").pop() ?? "";
-  return `bookcover://localhost/${filename}`;
+  return `bookcover://localhost/${filename}${v ? `?v=${v}` : ""}`;
 }
 
 interface Props {
@@ -32,8 +33,13 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
   const [fetching, setFetching] = useState(false);
   const [fetchError, setFetchError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
 
-  const { updateBook, allBooks } = useBookStore();
+  const { updateBook, patchBook, allBooks } = useBookStore();
+  const coverLocal = useBookStore(
+    (s) => s.allBooks.find((b) => b.id === book.id)?.cover_local ?? book.cover_local
+  );
+  const coverNonce = useBookStore((s) => s.coverNonce[book.id]);
   const { addToast } = useToastStore();
   const allTags = useMemo(() => {
     const set = new Set<string>();
@@ -100,6 +106,24 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
       setFetchError(String(e));
     } finally {
       setFetching(false);
+    }
+  };
+
+  const uploadCover = async () => {
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: "图片", extensions: ["jpg", "jpeg", "png", "webp"] }],
+    });
+    if (!selected) return;
+    setUploadingCover(true);
+    try {
+      const localPath = await invoke<string>("upload_cover", { id: book.id, srcPath: selected });
+      setForm((f) => ({ ...f, cover_url: "" }));
+      patchBook(book.id, { cover_local: localPath, cover_url: undefined });
+    } catch (err) {
+      addToast(String(err));
+    } finally {
+      setUploadingCover(false);
     }
   };
 
@@ -192,12 +216,19 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
               {/* Cover — reference while editing */}
               <div className="w-32 shrink-0">
                 <div className="aspect-[2/3] bg-gray-100 rounded-lg overflow-hidden">
-                  {book.cover_local ? (
-                    <img src={localCoverSrc(book.cover_local)} alt={book.title} className="w-full h-full object-cover" />
+                  {coverLocal ? (
+                    <img src={localCoverSrc(coverLocal!, coverNonce)} alt={book.title} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-gray-300 text-3xl">📚</div>
                   )}
                 </div>
+                <button
+                  onClick={uploadCover}
+                  disabled={uploadingCover}
+                  className="mt-1.5 w-full text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded py-1 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {uploadingCover ? "上传中…" : "上传封面"}
+                </button>
               </div>
 
               {/* Form fields */}
@@ -349,10 +380,10 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
               {/* Cover */}
               <div className="w-32 shrink-0">
                 <div className="aspect-[2/3] bg-gray-100 rounded-lg overflow-hidden">
-                  {book.cover_local ? (
+                  {coverLocal ? (
                     <img
-                      key={book.cover_local}
-                      src={localCoverSrc(book.cover_local)}
+                      key={`${coverLocal}-${coverNonce}`}
+                      src={localCoverSrc(coverLocal!, coverNonce)}
                       alt={book.title}
                       className="w-full h-full object-cover"
                     />

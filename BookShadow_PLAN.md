@@ -143,6 +143,7 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 | `update_book` | `id: i64, payload: UpdateBook` | `Book` | 更新 |
 | `delete_book` | `id: i64` | `()` | 删除（含本地封面） |
 | `download_cover` | `id, url, isbn` | `String` | 下载封面并更新 DB |
+| `upload_cover` | `id, src_path` | `String` | 从本地文件复制封面并更新 DB |
 | `fetch_by_isbn` | `isbn, source` | `BookMeta` | ISBN 或豆瓣链接元数据获取 |
 | `scan_isbn_image` | `path: String` | `ScanResult` | 条码识别 + 缩略图 |
 | `search_books` | `query: String` | `Vec<Book>` | FTS5 全文搜索 |
@@ -263,6 +264,19 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 - [x] 新增地域：尼日利亚、缅甸
 - [x] Vite 构建拆分 CodeMirror chunk，消除大包警告
 
+### Phase 11：构建优化 ✅（v0.5.3）
+
+- [x] Universal Binary 打包：`npm run tauri:build` 同时编译 `aarch64` + `x86_64`，产物可在 Apple Silicon 和 Intel Mac 原生运行
+
+### Phase 12：封面与数据完善 ✅（v0.5.4）
+
+- [x] 封面上传：编辑模式下支持从本地文件选择封面图片（jpg / png / webp），命名规范与豆瓣下载一致（`<id>_<isbn>.<ext>` 或 `<id>.<ext>`）
+- [x] 封面刷新修复：`bookcover://` 协议响应加 `Cache-Control: no-store`；store 维护 `coverNonce`，封面更新后 URL 含版本参数，确保 WebKit 不读旧缓存
+- [x] 封面覆盖策略：从豆瓣/Google Books/Open Library 重新获取封面时，无论是否已有本地封面均覆盖；手动上传后清空 `cover_url`，防止被自动重新下载覆盖
+- [x] 类别筛选分层：FilterPanel 类别区同地域一样，固定显示 8 个主要类别，其余折叠到「其他」
+- [x] 新增类别：音乐、生活、数学、物理
+- [x] 新增地域：智利
+
 ---
 
 ## 七、关键设计决策
@@ -279,6 +293,9 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 | `extract_nationality_prefix` 兼容多种括号 | 豆瓣页面混用 ASCII `[`、全角 `［`、黑角 `【` 及开闭混搭，统一搜索任意闭括号 |
 | 筛选联动计数 | 每个维度的数字排除自身过滤条件，对其余条件过滤后统计，消除"点击后无结果"歧义 |
 | Vite `manualChunks` 拆分 CodeMirror | CodeMirror 固有体积约 600 KB，单独拆出避免主 chunk 超限警告 |
+| `npm run tauri:build` 固定 `--target universal-apple-darwin` | 统一打包命令，产物同时支持 Apple Silicon 和 Intel，无需维护两套安装包 |
+| `bookcover://` 响应加 `Cache-Control: no-store` + `coverNonce` | WebKit 会缓存自定义协议响应；同文件名覆盖后需 URL 变化才能触发重新拉取 |
+| 手动上传封面后清空 `cover_url` | 防止下次编辑保存时自动重新下载远程封面，覆盖用户手动上传的图片 |
 
 ---
 

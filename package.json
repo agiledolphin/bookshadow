@@ -1,13 +1,14 @@
 {
   "name": "bookshadow",
   "private": true,
-  "version": "0.5.3",
+  "version": "0.5.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:build": "tauri build --target universal-apple-darwin"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",
