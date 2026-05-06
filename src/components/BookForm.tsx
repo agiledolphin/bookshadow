@@ -5,6 +5,7 @@ import { useBookStore } from "../stores/bookStore";
 import { useToastStore } from "../stores/toastStore";
 import { StarRating } from "./StarRating";
 import { TagInput, parseTags } from "./TagInput";
+import { SearchableSelect } from "./SearchableSelect";
 import { LANGUAGES, REGIONS, CATEGORIES, STATUSES } from "../types/book";
 
 interface Props {
@@ -72,7 +73,7 @@ export function BookForm({ book, onClose }: Props) {
         language: meta.language ?? f.language,
         region: meta.region ?? f.region,
         category: meta.category ?? f.category,
-        isbn: meta.isbn ?? isbnInput.trim(),
+        isbn: meta.isbn ?? (isDoubanUrl ? "" : isbnInput.trim()),
         rating: meta.rating ?? f.rating,
       }));
     } catch (e) {
@@ -215,24 +216,20 @@ export function BookForm({ book, onClose }: Props) {
               </select>
             </Field>
             <Field label="地域">
-              <select
+              <SearchableSelect
                 value={form.region ?? ""}
-                onChange={(e) => set("region", e.target.value)}
+                onChange={(v) => set("region", v)}
+                options={REGIONS}
                 className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-              >
-                <option value="">—</option>
-                {REGIONS.map((r) => <option key={r}>{r}</option>)}
-              </select>
+              />
             </Field>
             <Field label="类别">
-              <select
+              <SearchableSelect
                 value={form.category ?? ""}
-                onChange={(e) => set("category", e.target.value)}
+                onChange={(v) => set("category", v)}
+                options={CATEGORIES}
                 className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-              >
-                <option value="">—</option>
-                {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-              </select>
+              />
             </Field>
           </div>
 

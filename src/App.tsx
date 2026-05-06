@@ -13,7 +13,7 @@ import { Toast } from "./components/Toast";
 import "./App.css";
 
 export default function App() {
-  const { books, filters, viewMode, loading, hasMore, isLoadingMore, fetchBooks, loadMoreBooks, refreshAllBooks, searchBooks, setViewMode, setSortBy, deleteBook } = useBookStore();
+  const { books, filters, viewMode, loading, hasMore, isLoadingMore, fetchBooks, loadMoreBooks, refreshAllBooks, setSearchQuery, setFilters, setViewMode, setSortBy, deleteBook } = useBookStore();
   const { addToast } = useToastStore();
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -26,6 +26,11 @@ export default function App() {
     fetchBooks();
     refreshAllBooks();
   }, []);
+
+  // Sync input when store clears search_query (e.g. filter panel "全部")
+  useEffect(() => {
+    if (!filters.search_query) setQuery("");
+  }, [filters.search_query]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -64,6 +69,19 @@ export default function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [selectedBook, books]);
 
+  // ESC when nothing is open → reset all filters + search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const el = e.target as HTMLElement;
+      if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable) return;
+      if (selectedBook || showForm || showSettings || showBatchImport) return;
+      setFilters({});
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedBook, showForm, showSettings, showBatchImport, setFilters]);
+
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -76,10 +94,9 @@ export default function App() {
     setQuery(q);
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     searchTimerRef.current = setTimeout(() => {
-      if (q.trim()) searchBooks(q);
-      else fetchBooks();
+      setSearchQuery(q);
     }, 300);
-  }, [searchBooks, fetchBooks]);
+  }, [setSearchQuery]);
 
   return (
     <div className="flex h-screen bg-white select-none overflow-hidden">

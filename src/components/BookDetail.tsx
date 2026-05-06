@@ -8,6 +8,7 @@ import { useToastStore } from "../stores/toastStore";
 import { StarRating } from "./StarRating";
 import { TagInput, parseTags } from "./TagInput";
 import { ReviewEditor } from "./ReviewEditor";
+import { SearchableSelect } from "./SearchableSelect";
 
 function localCoverSrc(path: string, v = 0): string {
   const filename = path.split("/").pop() ?? "";
@@ -99,7 +100,7 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
         language: meta.language ?? f.language,
         region: meta.region ?? f.region,
         category: meta.category ?? f.category,
-        isbn: meta.isbn ?? isbnInput.trim(),
+        isbn: meta.isbn ?? (isDoubanUrl ? "" : isbnInput.trim()),
         rating: meta.rating ?? f.rating,
       }));
     } catch (e) {
@@ -318,16 +319,20 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
                     </select>
                   </FormField>
                   <FormField label="地域">
-                    <select value={form.region ?? ""} onChange={e => set("region", e.target.value)} className={inputCls}>
-                      <option value="">—</option>
-                      {REGIONS.map(r => <option key={r}>{r}</option>)}
-                    </select>
+                    <SearchableSelect
+                      value={form.region ?? ""}
+                      onChange={(v) => set("region", v)}
+                      options={REGIONS}
+                      className={inputCls}
+                    />
                   </FormField>
                   <FormField label="类别">
-                    <select value={form.category ?? ""} onChange={e => set("category", e.target.value)} className={inputCls}>
-                      <option value="">—</option>
-                      {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-                    </select>
+                    <SearchableSelect
+                      value={form.category ?? ""}
+                      onChange={(v) => set("category", v)}
+                      options={CATEGORIES}
+                      className={inputCls}
+                    />
                   </FormField>
                 </div>
 

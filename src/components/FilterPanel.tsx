@@ -22,14 +22,16 @@ function matchesFilters(book: Book, f: BookFilters): boolean {
 
 export function FilterPanel() {
   const { filters, setFilters, allBooks } = useBookStore();
+  const resetAll = () => setFilters({});
   const [otherOpen, setOtherOpen] = useState(false);
   const [otherCategoryOpen, setOtherCategoryOpen] = useState(false);
 
+  const SIDEBAR_KEYS = ["status", "rating", "region", "category", "decade", "language", "tag"] as const;
   const update = (key: string, value: string | number | undefined) => {
     setFilters({ ...filters, [key]: value });
   };
-  const clear = () => setFilters({});
-  const hasFilters = Object.values(filters).some((v) => v !== undefined);
+  const clear = () => setFilters({ search_query: filters.search_query, sort_by: filters.sort_by });
+  const hasFilters = SIDEBAR_KEYS.some((k) => filters[k] !== undefined);
 
   const otherRegions = useMemo(() => {
     const primarySet = new Set<string>(PRIMARY_REGIONS);
@@ -57,7 +59,7 @@ export function FilterPanel() {
     const rating: Record<number, number> = {};
     const status: Record<string, number> = {};
     const tag: Record<string, number> = {};
-    const decadeSet = new Set<number>();
+    const decade: Record<number, number> = {};
 
     for (const b of allBooks) {
       const ex = (dim: keyof BookFilters) => matchesFilters(b, { ...filters, [dim]: undefined });
@@ -74,11 +76,11 @@ export function FilterPanel() {
       }
       if (ex("decade") && b.pub_date) {
         const y = parseInt(b.pub_date.slice(0, 4));
-        if (!isNaN(y)) decadeSet.add(Math.floor(y / 10) * 10);
+        if (!isNaN(y)) { const d = Math.floor(y / 10) * 10; decade[d] = (decade[d] ?? 0) + 1; }
       }
     }
-    const decades = Array.from(decadeSet).sort((a, b) => b - a);
-    return { region, category, language, rating, status, tag, decades };
+    const decades = Object.keys(decade).map(Number).sort((a, b) => b - a);
+    return { region, category, language, rating, status, tag, decade, decades };
   }, [allBooks, filters]);
 
   const activeRegionIsOther =
@@ -94,22 +96,28 @@ export function FilterPanel() {
       {/* Traffic-light drag region + brand */}
       <div
         data-tauri-drag-region
-        className="flex items-center justify-center gap-2.5 px-2 pt-9 pb-3 border-b border-gray-100 shrink-0 cursor-default select-none"
+        className="flex items-center justify-center px-2 pt-9 pb-3 border-b border-gray-100 shrink-0 select-none"
       >
-        {/* Left: icon + 书影 */}
-        <div className="flex flex-col items-center gap-1 leading-none">
-          <svg viewBox="0 0 24 24" className="w-5 h-5 text-gray-600 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M2 6.5C2 5.12 3.12 4 4.5 4H12v16H4.5A2.5 2.5 0 0 1 2 17.5v-11Z" />
-            <path d="M12 4h7.5C20.88 4 22 5.12 22 6.5v11A2.5 2.5 0 0 1 19.5 20H12V4Z" />
-            <path d="M12 4v16" />
-          </svg>
-          <span className="text-[11px] font-bold tracking-[0.18em] text-gray-800">书影</span>
-        </div>
-        {/* Right: BOOK / SHADOW */}
-        <div className="flex flex-col leading-none gap-0.5">
-          <span className="text-[11px] font-light tracking-[0.22em] text-gray-800 uppercase">BOOK</span>
-          <span className="text-[11px] font-bold tracking-[0.1em] text-gray-800 uppercase">SHADOW</span>
-        </div>
+        <button
+          onClick={resetAll}
+          title="回到全部（ESC）"
+          className="flex items-center gap-2.5 cursor-pointer hover:opacity-70 transition-opacity"
+        >
+          {/* Left: icon + 书影 */}
+          <div className="flex flex-col items-center gap-1 leading-none">
+            <svg viewBox="0 0 24 24" className="w-5 h-5 text-gray-600 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 6.5C2 5.12 3.12 4 4.5 4H12v16H4.5A2.5 2.5 0 0 1 2 17.5v-11Z" />
+              <path d="M12 4h7.5C20.88 4 22 5.12 22 6.5v11A2.5 2.5 0 0 1 19.5 20H12V4Z" />
+              <path d="M12 4v16" />
+            </svg>
+            <span className="text-[11px] font-bold tracking-[0.18em] text-gray-800">书影</span>
+          </div>
+          {/* Right: BOOK / SHADOW */}
+          <div className="flex flex-col leading-none gap-0.5">
+            <span className="text-[11px] font-light tracking-[0.22em] text-gray-800 uppercase">BOOK</span>
+            <span className="text-[11px] font-bold tracking-[0.1em] text-gray-800 uppercase">SHADOW</span>
+          </div>
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -262,6 +270,7 @@ export function FilterPanel() {
             <GroupItem
               key={d}
               active={filters.decade === d}
+              count={counts.decade[d]}
               onClick={() => update("decade", filters.decade === d ? undefined : d)}
             >
               {d}s

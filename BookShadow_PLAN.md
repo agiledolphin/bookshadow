@@ -277,6 +277,23 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 - [x] 新增类别：音乐、生活、数学、物理
 - [x] 新增地域：智利
 
+### Phase 13：体验与数据修复 ✅（v0.5.5）
+
+- [x] 批量导入后左侧筛选栏未刷新：导入完成后同时调用 `refreshAllBooks()`，`allBooks` 更新后筛选计数即时联动
+- [x] 新增地域：希腊（含豆瓣国籍映射 `"希" | "希腊" => "希腊"`）
+- [x] 新增类别：设计（位于「艺术」之后，归入筛选栏「其他」折叠区）
+- [x] 可搜索下拉 `SearchableSelect` 组件：替换 BookForm 与 BookDetail 编辑模式中的地域、类别原生 `<select>`；输入过滤、键盘导航、当前选中项高亮，语言字段选项少保持原 select
+- [x] ISBN 合法性校验：`sanitize_isbn` 函数只接受纯数字/连字符/X（ISBN-10 校验位）；`create_book` / `update_book` 入口清洗，豆瓣 URL 等非法值存 NULL；`download_cover` / `upload_cover` 文件名生成同步修复，彻底消除含斜杠路径导致的"No such file or directory"
+- [x] 前端 ISBN 回填修复：BookForm / BookDetail 通过豆瓣链接抓取后，若 `meta.isbn` 为空不再将原始 URL 回填到 isbn 字段
+- [x] 数据库一次性清理：将现有 isbn 字段中存储为豆瓣 URL 的记录置 NULL
+
+### Phase 14：搜索与筛选统一 ✅（v0.5.6）
+
+- [x] 搜索与筛选合并：`search_query` 并入 `BookFilters`，`get_books` 统一处理文字搜索（title/author/translator/description/tags LIKE）与侧边栏筛选（AND 组合）；删除独立的 `search_books` 命令调用路径
+- [x] 「全部」按钮行为优化：仅反映侧边栏筛选状态，有搜索词时保持高亮；点击只清侧边栏条件，不清搜索框
+- [x] 年代筛选加数量：筛选面板年代区显示各年代书籍数量，与状态/地域等维度保持一致
+- [x] 全局重置快捷入口：点击侧边栏「书影」logo 或按 `Escape`（无弹窗/详情面板/输入框聚焦时）可一键清空所有筛选与搜索词，回到全部图书浏览状态
+
 ---
 
 ## 七、关键设计决策
@@ -296,6 +313,9 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 | `npm run tauri:build` 固定 `--target universal-apple-darwin` | 统一打包命令，产物同时支持 Apple Silicon 和 Intel，无需维护两套安装包 |
 | `bookcover://` 响应加 `Cache-Control: no-store` + `coverNonce` | WebKit 会缓存自定义协议响应；同文件名覆盖后需 URL 变化才能触发重新拉取 |
 | 手动上传封面后清空 `cover_url` | 防止下次编辑保存时自动重新下载远程封面，覆盖用户手动上传的图片 |
+| `sanitize_isbn` 校验 ISBN 格式 | isbn 字段存入豆瓣 URL 时，`upload_cover` / `download_cover` 拼出含 `/` 的非法路径，导致"No such file or directory"；在保存层统一清洗，从源头防止脏数据入库 |
+| `SearchableSelect` 替换地域/类别下拉 | 地域 40+ 项、类别 26 项，原生 select 滚动体验差；可搜索下拉输入 1-2 字即可过滤，与标签输入体验一致，组件在 BookForm / BookDetail 复用 |
+| 批量导入后调用 `refreshAllBooks` | `fetchBooks` 只更新分页列表 `books`，筛选面板依赖 `allBooks`；导入后需额外刷新 `allBooks` 才能更新筛选计数 |
 
 ---
 

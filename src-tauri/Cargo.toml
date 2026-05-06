@@ -1,6 +1,6 @@
 [package]
 name = "bookshadow"
-version = "0.5.4"
+version = "0.5.6"
 description = "书影 BookShadow — 家庭藏书管理"
 authors = ["Sun Jiaming"]
 edition = "2021"

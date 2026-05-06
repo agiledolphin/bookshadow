@@ -10,7 +10,6 @@ interface BookStore {
   selectedBook: Book | null;
   reviews: Review[];
   filters: BookFilters;
-  searchQuery: string;
   viewMode: ViewMode;
   loading: boolean;
   isLoadingMore: boolean;
@@ -22,7 +21,7 @@ interface BookStore {
   fetchBooks: (reset?: boolean) => Promise<void>;
   loadMoreBooks: () => Promise<void>;
   refreshAllBooks: () => Promise<void>;
-  searchBooks: (query: string, reset?: boolean) => Promise<void>;
+  setSearchQuery: (q: string) => void;
   selectBook: (book: Book | null) => void;
   patchBook: (id: number, patch: Partial<Book>) => void;
   createBook: (payload: CreateBook) => Promise<Book>;
@@ -46,7 +45,6 @@ export const useBookStore = create<BookStore>((set, get) => ({
   coverNonce: {},
   reviews: [],
   filters: {},
-  searchQuery: "",
   viewMode: "grid",
   loading: false,
   isLoadingMore: false,
@@ -79,14 +77,9 @@ export const useBookStore = create<BookStore>((set, get) => ({
   },
 
   loadMoreBooks: async () => {
-    const { hasMore, isLoadingMore, loading, searchQuery } = get();
+    const { hasMore, isLoadingMore, loading } = get();
     if (!hasMore || isLoadingMore || loading) return;
-
-    if (searchQuery.trim()) {
-      await get().searchBooks(searchQuery, false);
-    } else {
-      await get().fetchBooks(false);
-    }
+    await get().fetchBooks(false);
   },
 
   refreshAllBooks: async () => {
@@ -94,34 +87,9 @@ export const useBookStore = create<BookStore>((set, get) => ({
     set({ allBooks });
   },
 
-  searchBooks: async (query: string, reset = true) => {
-    const { books } = get();
-    const offset = reset ? 0 : books.length;
-
-    set({ searchQuery: query });
-
-    if (reset) {
-      set({ loading: true, error: null, books: [] });
-    } else {
-      set({ isLoadingMore: true });
-    }
-
-    try {
-      const newBooks = await invoke<Book[]>("search_books", {
-        query,
-        limit: PAGE_SIZE,
-        offset,
-        sort_by: get().filters.sort_by ?? null,
-      });
-      set((s) => ({
-        books: reset ? newBooks : [...s.books, ...newBooks],
-        hasMore: newBooks.length === PAGE_SIZE,
-        loading: false,
-        isLoadingMore: false,
-      }));
-    } catch (e) {
-      set({ error: String(e), loading: false, isLoadingMore: false });
-    }
+  setSearchQuery: (q: string) => {
+    set((s) => ({ filters: { ...s.filters, search_query: q.trim() || undefined } }));
+    get().fetchBooks(true);
   },
 
   selectBook: (book) => set({ selectedBook: book }),
@@ -197,12 +165,7 @@ export const useBookStore = create<BookStore>((set, get) => ({
 
   setSortBy: (sortBy) => {
     set((s) => ({ filters: { ...s.filters, sort_by: sortBy } }));
-    const { searchQuery } = get();
-    if (searchQuery.trim()) {
-      get().searchBooks(searchQuery, true);
-    } else {
-      get().fetchBooks(true);
-    }
+    get().fetchBooks(true);
   },
 
   setViewMode: (mode) => set({ viewMode: mode }),

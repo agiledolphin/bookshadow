@@ -3,6 +3,18 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+/// Only keep isbn if every character is a digit, hyphen, or 'X'/'x' (ISBN-10 check digit).
+fn sanitize_isbn(isbn: Option<String>) -> Option<String> {
+    isbn.and_then(|s| {
+        let t = s.trim().to_string();
+        if t.is_empty() || !t.chars().all(|c| c.is_ascii_digit() || c == '-' || c == 'X' || c == 'x') {
+            None
+        } else {
+            Some(t)
+        }
+    })
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Book {
     pub id: i64,
@@ -70,6 +82,7 @@ pub struct BookFilters {
     pub decade: Option<i32>,
     pub status: Option<String>,
     pub tag: Option<String>,
+    pub search_query: Option<String>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
     pub sort_by: Option<String>,
@@ -130,6 +143,16 @@ pub fn get_books(
     if let Some(v) = f.category { conditions.push(format!("category = ?{}", param_values.len() + 1)); param_values.push(Box::new(v)); }
     if let Some(v) = f.status   { conditions.push(format!("status = ?{}", param_values.len() + 1));   param_values.push(Box::new(v)); }
     if let Some(v) = f.tag     { conditions.push(format!("tags LIKE ?{}", param_values.len() + 1));   param_values.push(Box::new(format!("%\"{}\"%" , v))); }
+    if let Some(ref v) = f.search_query {
+        let q = v.trim();
+        if !q.is_empty() {
+            let n = param_values.len() + 1;
+            conditions.push(format!(
+                "(title LIKE ?{n} OR author LIKE ?{n} OR translator LIKE ?{n} OR description LIKE ?{n} OR tags LIKE ?{n})"
+            ));
+            param_values.push(Box::new(format!("%{}%", q)));
+        }
+    }
     if let Some(v) = f.decade {
         let from = format!("{}", v);
         let to   = format!("{}", v + 9);
@@ -179,7 +202,8 @@ pub fn get_book(state: State<'_, DbState>, id: i64) -> Result<Book, String> {
 }
 
 #[tauri::command]
-pub fn create_book(state: State<'_, DbState>, payload: CreateBook) -> Result<Book, String> {
+pub fn create_book(state: State<'_, DbState>, mut payload: CreateBook) -> Result<Book, String> {
+    payload.isbn = sanitize_isbn(payload.isbn);
     let conn = state.0.lock().map_err(|e| e.to_string())?;
 
     if let Some(ref isbn) = payload.isbn {
@@ -223,8 +247,9 @@ pub fn create_book(state: State<'_, DbState>, payload: CreateBook) -> Result<Boo
 pub fn update_book(
     state: State<'_, DbState>,
     id: i64,
-    payload: UpdateBook,
+    mut payload: UpdateBook,
 ) -> Result<Book, String> {
+    payload.isbn = sanitize_isbn(payload.isbn);
     let conn = state.0.lock().map_err(|e| e.to_string())?;
 
     let mut sets: Vec<String> = vec![];
@@ -323,8 +348,8 @@ pub async fn download_cover(
     let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
 
     let ext = if url.ends_with(".png") { "png" } else { "jpg" };
-    let stem = match isbn.as_deref().filter(|s| !s.trim().is_empty()) {
-        Some(s) => format!("{}_{}", id, s.trim()),
+    let stem = match sanitize_isbn(isbn) {
+        Some(s) => format!("{}_{}", id, s),
         None    => id.to_string(),
     };
     let covers_dir = data_dir().join("covers");
@@ -358,8 +383,8 @@ pub fn upload_cover(state: State<'_, DbState>, id: i64, src_path: String) -> Res
         .unwrap_or("jpg")
         .to_lowercase();
 
-    let stem = match isbn.as_deref().filter(|s| !s.trim().is_empty()) {
-        Some(s) => format!("{}_{}", id, s.trim()),
+    let stem = match sanitize_isbn(isbn) {
+        Some(s) => format!("{}_{}", id, s),
         None    => id.to_string(),
     };
     let dest = data_dir().join("covers").join(format!("{}.{}", stem, ext));
