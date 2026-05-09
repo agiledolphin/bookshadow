@@ -294,6 +294,12 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 - [x] 年代筛选加数量：筛选面板年代区显示各年代书籍数量，与状态/地域等维度保持一致
 - [x] 全局重置快捷入口：点击侧边栏「书影」logo 或按 `Escape`（无弹窗/详情面板/输入框聚焦时）可一键清空所有筛选与搜索词，回到全部图书浏览状态
 
+### Phase 15：筛选计数后端化与体验修复 ✅（v0.5.7）
+
+- [x] 筛选计数后端化：新增 `get_filter_counts` Rust 命令，各维度用 SQL `GROUP BY` 聚合计算（星级返回累积值，标签用 Rust 侧解析 JSON 数组），搜索词始终参与计数，每个维度排除自身过滤条件；删除 `allBooks` / `refreshAllBooks`，FilterPanel 直接使用后端返回数据，联动计数现在反映搜索词
+- [x] 标签补全数据源修复：BookDetail / BookForm 的标签补全改用 `filterCounts.tag`（全库聚合），覆盖面从分页的 40 条扩展到全库；`updateBook` 保存后刷新 `filterCounts`，新增标签即时出现在补全列表
+- [x] `/` 快捷键修复：焦点在排序下拉框（`<select>`）时按 `/` 无法聚焦搜索框，已从排除列表中移除 `SELECT`（`/` 在 select 内无实际作用）
+
 ---
 
 ## 七、关键设计决策

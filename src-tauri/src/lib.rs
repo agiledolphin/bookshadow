@@ -125,6 +125,7 @@ pub fn run() {
             commands::book::delete_book,
             commands::book::download_cover,
             commands::book::upload_cover,
+            commands::filter_counts::get_filter_counts,
             commands::review::get_reviews,
             commands::review::create_review,
             commands::review::update_review,

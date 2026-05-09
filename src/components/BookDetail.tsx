@@ -36,17 +36,17 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
   const [saving, setSaving] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
 
-  const { updateBook, patchBook, allBooks } = useBookStore();
+  const { updateBook, patchBook } = useBookStore();
   const coverLocal = useBookStore(
-    (s) => s.allBooks.find((b) => b.id === book.id)?.cover_local ?? book.cover_local
+    (s) => s.books.find((b) => b.id === book.id)?.cover_local ?? book.cover_local
   );
   const coverNonce = useBookStore((s) => s.coverNonce[book.id]);
   const { addToast } = useToastStore();
-  const allTags = useMemo(() => {
-    const set = new Set<string>();
-    for (const b of allBooks) for (const t of parseTags(b.tags ?? "[]")) set.add(t);
-    return Array.from(set).sort();
-  }, [allBooks]);
+  const filterCountsTags = useBookStore((s) => s.filterCounts?.tag);
+  const allTags = useMemo(
+    () => Object.keys(filterCountsTags ?? {}).sort(),
+    [filterCountsTags],
+  );
 
   const isDoubanUrl = /douban\.com\/subject\/\d+/.test(isbnInput.trim());
 

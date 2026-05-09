@@ -89,6 +89,18 @@ export interface CreateReview {
   reviewed_at?: string;
 }
 
+export interface FilterCounts {
+  total: number;
+  status: Record<string, number>;
+  region: Record<string, number>;
+  category: Record<string, number>;
+  language: Record<string, number>;
+  /** Cumulative: rating[r] = count of books with rating >= r */
+  rating: Record<string, number>;
+  decade: Record<string, number>;
+  tag: Record<string, number>;
+}
+
 export type ViewMode = "grid" | "list";
 
 export const LANGUAGES = ["中文", "English", "日本語", "其他"] as const;

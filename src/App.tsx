@@ -13,7 +13,7 @@ import { Toast } from "./components/Toast";
 import "./App.css";
 
 export default function App() {
-  const { books, filters, viewMode, loading, hasMore, isLoadingMore, fetchBooks, loadMoreBooks, refreshAllBooks, setSearchQuery, setFilters, setViewMode, setSortBy, deleteBook } = useBookStore();
+  const { books, filters, viewMode, loading, hasMore, isLoadingMore, fetchBooks, loadMoreBooks, setSearchQuery, setFilters, setViewMode, setSortBy, deleteBook } = useBookStore();
   const { addToast } = useToastStore();
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -24,7 +24,6 @@ export default function App() {
 
   useEffect(() => {
     fetchBooks();
-    refreshAllBooks();
   }, []);
 
   // Sync input when store clears search_query (e.g. filter panel "全部")
@@ -36,7 +35,7 @@ export default function App() {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== "/") return;
       const el = e.target as HTMLElement;
-      if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable) return;
+      if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable) return;
       e.preventDefault();
       searchInputRef.current?.focus();
       searchInputRef.current?.select();

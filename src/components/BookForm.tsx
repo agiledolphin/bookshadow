@@ -4,7 +4,7 @@ import type { Book, CreateBook, BookMeta } from "../types/book";
 import { useBookStore } from "../stores/bookStore";
 import { useToastStore } from "../stores/toastStore";
 import { StarRating } from "./StarRating";
-import { TagInput, parseTags } from "./TagInput";
+import { TagInput } from "./TagInput";
 import { SearchableSelect } from "./SearchableSelect";
 import { LANGUAGES, REGIONS, CATEGORIES, STATUSES } from "../types/book";
 
@@ -14,12 +14,12 @@ interface Props {
 }
 
 export function BookForm({ book, onClose }: Props) {
-  const { createBook, updateBook, allBooks } = useBookStore();
-  const allTags = useMemo(() => {
-    const set = new Set<string>();
-    for (const b of allBooks) for (const t of parseTags(b.tags ?? "[]")) set.add(t);
-    return Array.from(set).sort();
-  }, [allBooks]);
+  const { createBook, updateBook } = useBookStore();
+  const filterCountsTags = useBookStore((s) => s.filterCounts?.tag);
+  const allTags = useMemo(
+    () => Object.keys(filterCountsTags ?? {}).sort(),
+    [filterCountsTags],
+  );
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };

@@ -1,15 +1,15 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import type { Book, BookFilters, CreateBook, UpdateBook, Review, CreateReview, ViewMode } from "../types/book";
+import type { Book, BookFilters, FilterCounts, CreateBook, UpdateBook, Review, CreateReview, ViewMode } from "../types/book";
 
 const PAGE_SIZE = 40;
 
 interface BookStore {
   books: Book[];
-  allBooks: Book[];
   selectedBook: Book | null;
   reviews: Review[];
   filters: BookFilters;
+  filterCounts: FilterCounts | null;
   viewMode: ViewMode;
   loading: boolean;
   isLoadingMore: boolean;
@@ -19,8 +19,8 @@ interface BookStore {
 
   // actions
   fetchBooks: (reset?: boolean) => Promise<void>;
+  fetchFilterCounts: () => Promise<void>;
   loadMoreBooks: () => Promise<void>;
-  refreshAllBooks: () => Promise<void>;
   setSearchQuery: (q: string) => void;
   selectBook: (book: Book | null) => void;
   patchBook: (id: number, patch: Partial<Book>) => void;
@@ -40,11 +40,11 @@ interface BookStore {
 
 export const useBookStore = create<BookStore>((set, get) => ({
   books: [],
-  allBooks: [],
   selectedBook: null,
   coverNonce: {},
   reviews: [],
   filters: {},
+  filterCounts: null,
   viewMode: "grid",
   loading: false,
   isLoadingMore: false,
@@ -57,6 +57,7 @@ export const useBookStore = create<BookStore>((set, get) => ({
 
     if (reset) {
       set({ loading: true, error: null, books: [] });
+      get().fetchFilterCounts();
     } else {
       set({ isLoadingMore: true });
     }
@@ -82,9 +83,14 @@ export const useBookStore = create<BookStore>((set, get) => ({
     await get().fetchBooks(false);
   },
 
-  refreshAllBooks: async () => {
-    const allBooks = await invoke<Book[]>("get_books", { filters: {} });
-    set({ allBooks });
+  fetchFilterCounts: async () => {
+    const { filters } = get();
+    try {
+      const counts = await invoke<FilterCounts>("get_filter_counts", { filters });
+      set({ filterCounts: counts });
+    } catch (e) {
+      console.warn("fetchFilterCounts failed:", e);
+    }
   },
 
   setSearchQuery: (q: string) => {
@@ -96,7 +102,6 @@ export const useBookStore = create<BookStore>((set, get) => ({
 
   patchBook: (id, patch) => set((s) => ({
     books: s.books.map((b) => b.id === id ? { ...b, ...patch } : b),
-    allBooks: s.allBooks.map((b) => b.id === id ? { ...b, ...patch } : b),
     selectedBook: s.selectedBook?.id === id ? { ...s.selectedBook, ...patch } : s.selectedBook,
     coverNonce: patch.cover_local !== undefined
       ? { ...s.coverNonce, [id]: Date.now() }
@@ -105,7 +110,8 @@ export const useBookStore = create<BookStore>((set, get) => ({
 
   createBook: async (payload) => {
     const book = await invoke<Book>("create_book", { payload });
-    set((s) => ({ books: [book, ...s.books], allBooks: [book, ...s.allBooks] }));
+    set((s) => ({ books: [book, ...s.books] }));
+    get().fetchFilterCounts();
     if (book.cover_url) {
       invoke<string>("download_cover", { id: book.id, url: book.cover_url, isbn: book.isbn ?? null })
         .then((localPath) => {
@@ -113,8 +119,7 @@ export const useBookStore = create<BookStore>((set, get) => ({
             const updated = { ...book, cover_local: localPath };
             return {
               books: s.books.map((b) => (b.id === book.id ? updated : b)),
-              allBooks: s.allBooks.map((b) => (b.id === book.id ? updated : b)),
-              selectedBook: s.selectedBook?.id === book.id ? updated : s.selectedBook,
+                            selectedBook: s.selectedBook?.id === book.id ? updated : s.selectedBook,
               coverNonce: { ...s.coverNonce, [book.id]: Date.now() },
             };
           });
@@ -128,9 +133,9 @@ export const useBookStore = create<BookStore>((set, get) => ({
     const book = await invoke<Book>("update_book", { id, payload });
     set((s) => ({
       books: s.books.map((b) => (b.id === id ? book : b)),
-      allBooks: s.allBooks.map((b) => (b.id === id ? book : b)),
       selectedBook: s.selectedBook?.id === id ? book : s.selectedBook,
     }));
+    get().fetchFilterCounts();
     if (book.cover_url) {
       invoke<string>("download_cover", { id: book.id, url: book.cover_url, isbn: book.isbn ?? null })
         .then((localPath) => {
@@ -138,7 +143,7 @@ export const useBookStore = create<BookStore>((set, get) => ({
             const updated = { ...book, cover_local: localPath };
             return {
               books: s.books.map((b) => (b.id === id ? updated : b)),
-              allBooks: s.allBooks.map((b) => (b.id === id ? updated : b)),
+
               selectedBook: s.selectedBook?.id === id ? updated : s.selectedBook,
               coverNonce: { ...s.coverNonce, [id]: Date.now() },
             };
@@ -153,9 +158,9 @@ export const useBookStore = create<BookStore>((set, get) => ({
     await invoke("delete_book", { id });
     set((s) => ({
       books: s.books.filter((b) => b.id !== id),
-      allBooks: s.allBooks.filter((b) => b.id !== id),
       selectedBook: s.selectedBook?.id === id ? null : s.selectedBook,
     }));
+    get().fetchFilterCounts();
   },
 
   setFilters: (filters) => {

@@ -1,27 +1,9 @@
 import { useState, useMemo } from "react";
 import { useBookStore } from "../stores/bookStore";
 import { LANGUAGES, PRIMARY_REGIONS, PRIMARY_CATEGORIES, RATINGS, STATUSES } from "../types/book";
-import type { Book, BookFilters } from "../types/book";
-import { parseTags } from "./TagInput";
-
-function matchesFilters(book: Book, f: BookFilters): boolean {
-  if (f.status   !== undefined && book.status   !== f.status)   return false;
-  if (f.region   !== undefined && book.region   !== f.region)   return false;
-  if (f.category !== undefined && book.category !== f.category) return false;
-  if (f.language !== undefined && book.language !== f.language) return false;
-  if (f.rating   !== undefined && (book.rating ?? 0) < f.rating) return false;
-  if (f.decade   !== undefined) {
-    const y = parseInt(book.pub_date?.slice(0, 4) ?? "");
-    if (isNaN(y) || Math.floor(y / 10) * 10 !== f.decade) return false;
-  }
-  if (f.tag !== undefined) {
-    if (!parseTags(book.tags ?? "[]").includes(f.tag)) return false;
-  }
-  return true;
-}
 
 export function FilterPanel() {
-  const { filters, setFilters, allBooks } = useBookStore();
+  const { filters, filterCounts, setFilters } = useBookStore();
   const resetAll = () => setFilters({});
   const [otherOpen, setOtherOpen] = useState(false);
   const [otherCategoryOpen, setOtherCategoryOpen] = useState(false);
@@ -33,55 +15,24 @@ export function FilterPanel() {
   const clear = () => setFilters({ search_query: filters.search_query, sort_by: filters.sort_by });
   const hasFilters = SIDEBAR_KEYS.some((k) => filters[k] !== undefined);
 
+  const counts = filterCounts ?? {
+    total: 0, status: {}, region: {}, category: {}, language: {}, rating: {}, decade: {}, tag: {},
+  };
+
+  const decades = useMemo(
+    () => Object.keys(counts.decade).map(Number).sort((a, b) => b - a),
+    [counts.decade],
+  );
+
   const otherRegions = useMemo(() => {
     const primarySet = new Set<string>(PRIMARY_REGIONS);
-    const seen = new Set<string>();
-    for (const b of allBooks) {
-      if (b.region && !primarySet.has(b.region)) seen.add(b.region);
-    }
-    return Array.from(seen).sort();
-  }, [allBooks]);
+    return Object.keys(counts.region).filter((r) => !primarySet.has(r)).sort();
+  }, [counts.region]);
 
   const otherCategories = useMemo(() => {
     const primarySet = new Set<string>(PRIMARY_CATEGORIES);
-    const seen = new Set<string>();
-    for (const b of allBooks) {
-      if (b.category && !primarySet.has(b.category)) seen.add(b.category);
-    }
-    return Array.from(seen).sort();
-  }, [allBooks]);
-
-  // 联动计数：每个维度的数字只统计满足"其他所有已选条件"的书籍
-  const counts = useMemo(() => {
-    const region: Record<string, number> = {};
-    const category: Record<string, number> = {};
-    const language: Record<string, number> = {};
-    const rating: Record<number, number> = {};
-    const status: Record<string, number> = {};
-    const tag: Record<string, number> = {};
-    const decade: Record<number, number> = {};
-
-    for (const b of allBooks) {
-      const ex = (dim: keyof BookFilters) => matchesFilters(b, { ...filters, [dim]: undefined });
-
-      if (ex("status")   && b.status)   status[b.status]     = (status[b.status]     ?? 0) + 1;
-      if (ex("region")   && b.region)   region[b.region]     = (region[b.region]     ?? 0) + 1;
-      if (ex("category") && b.category) category[b.category] = (category[b.category] ?? 0) + 1;
-      if (ex("language") && b.language) language[b.language] = (language[b.language] ?? 0) + 1;
-      if (ex("rating")   && b.rating) {
-        for (let r = 1; r <= b.rating; r++) rating[r] = (rating[r] ?? 0) + 1;
-      }
-      if (ex("tag")) {
-        for (const t of parseTags(b.tags ?? "[]")) tag[t] = (tag[t] ?? 0) + 1;
-      }
-      if (ex("decade") && b.pub_date) {
-        const y = parseInt(b.pub_date.slice(0, 4));
-        if (!isNaN(y)) { const d = Math.floor(y / 10) * 10; decade[d] = (decade[d] ?? 0) + 1; }
-      }
-    }
-    const decades = Object.keys(decade).map(Number).sort((a, b) => b - a);
-    return { region, category, language, rating, status, tag, decade, decades };
-  }, [allBooks, filters]);
+    return Object.keys(counts.category).filter((c) => !primarySet.has(c)).sort();
+  }, [counts.category]);
 
   const activeRegionIsOther =
     filters.region !== undefined &&
@@ -131,7 +82,7 @@ export function FilterPanel() {
           >
             <span>全部</span>
             <span className={`ml-2 shrink-0 text-[10px] tabular-nums ${!hasFilters ? "text-blue-400" : "text-gray-400"}`}>
-              {allBooks.length}
+              {counts.total}
             </span>
           </button>
         </div>
@@ -264,9 +215,9 @@ export function FilterPanel() {
         ))}
       </FilterGroup>
 
-      {counts.decades.length > 0 && (
+      {decades.length > 0 && (
         <FilterGroup label="年代">
-          {counts.decades.map((d) => (
+          {decades.map((d) => (
             <GroupItem
               key={d}
               active={filters.decade === d}

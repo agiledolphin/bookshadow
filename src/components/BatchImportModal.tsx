@@ -202,7 +202,7 @@ export function BatchImportModal({ onClose }: { onClose: () => void }) {
   const isbnMapRef = useRef<Map<string, Book>>(new Map());
   const rowsRef = useRef<ImportRow[]>([]);
   const dragCounterRef = useRef(0);
-  const { fetchBooks, refreshAllBooks } = useBookStore();
+  const { fetchBooks } = useBookStore();
 
   // Keep rowsRef in sync for use inside event listeners
   useEffect(() => { rowsRef.current = rows; }, [rows]);
@@ -377,13 +377,13 @@ export function BatchImportModal({ onClose }: { onClose: () => void }) {
       }
     }
 
-    await Promise.all([fetchBooks(), refreshAllBooks()]);
+    await fetchBooks();
     setImporting(false);
 
     if (coverDownloads.length > 0) {
       Promise.all(coverDownloads).then(() => fetchBooks());
     }
-  }, [rows, updateRow, fetchBooks, refreshAllBooks]);
+  }, [rows, updateRow, fetchBooks]);
 
   const isProcessing = rows.some(r => ["scanning", "fetching", "importing"].includes(r.phase));
   const readySelected = rows.filter(r => r.phase === "ready" && r.selected).length;
