@@ -160,5 +160,6 @@ pub async fn fetch(isbn: &str, api_key: Option<&str>) -> Result<BookMeta> {
         category,
         isbn: isbn_val.or_else(|| Some(isbn.to_string())),
         rating: None,
+        series: None,
     })
 }

@@ -9,6 +9,7 @@ import { StarRating } from "./StarRating";
 import { TagInput, parseTags } from "./TagInput";
 import { ReviewEditor } from "./ReviewEditor";
 import { SearchableSelect } from "./SearchableSelect";
+import { DateInput } from "./DateInput";
 
 function localCoverSrc(path: string, v = 0): string {
   const filename = path.split("/").pop() ?? "";
@@ -78,6 +79,32 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
   const set = <K extends keyof CreateBook>(key: K, value: CreateBook[K]) =>
     setForm(f => ({ ...f, [key]: value }));
 
+  const handleStatusClick = (value: string) => {
+    setForm(f => {
+      const isActive = f.status === value;
+      const newStatus = isActive ? "" : value;
+      const today = new Date().toISOString().split("T")[0];
+      if (isActive) {
+        return {
+          ...f,
+          status: newStatus,
+          started_at:  value === "reading" ? undefined : f.started_at,
+          finished_at: value === "read"    ? undefined : f.finished_at,
+        };
+      }
+      switch (value) {
+        case "want":
+          return { ...f, status: newStatus, started_at: undefined, finished_at: undefined };
+        case "reading":
+          return { ...f, status: newStatus, started_at: f.started_at ?? today, finished_at: undefined };
+        case "read":
+          return { ...f, status: newStatus, finished_at: f.finished_at ?? today };
+        default:
+          return { ...f, status: newStatus };
+      }
+    });
+  };
+
   const fetchIsbn = async () => {
     if (!isbnInput.trim()) return;
     setFetching(true);
@@ -102,6 +129,7 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
         category: meta.category ?? f.category,
         isbn: meta.isbn ?? (isDoubanUrl ? "" : isbnInput.trim()),
         rating: meta.rating ?? f.rating,
+        series: meta.series ?? f.series,
       }));
     } catch (e) {
       setFetchError(String(e));
@@ -192,15 +220,27 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
               </button>
             </div>
           ) : (
-            <button
-              onClick={enterEditMode}
-              title="编辑"
-              className="shrink-0 p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H8v-2.414a2 2 0 01.586-1.414z" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {(!book.region || !book.category || !book.language) && (
+                <button
+                  onClick={enterEditMode}
+                  title="有字段待完善"
+                  className="flex items-center gap-1 text-xs text-amber-500 hover:text-amber-600 cursor-pointer"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                  待完善
+                </button>
+              )}
+              <button
+                onClick={enterEditMode}
+                title="编辑"
+                className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H8v-2.414a2 2 0 01.586-1.414z" />
+                </svg>
+              </button>
+            </div>
           )}
           <button
             onClick={onClose}
@@ -230,6 +270,9 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
                 >
                   {uploadingCover ? "上传中…" : "上传封面"}
                 </button>
+                <div className="mt-2 flex justify-center">
+                  <StarRating value={form.rating ?? 0} onChange={v => set("rating", v)} />
+                </div>
               </div>
 
               {/* Form fields */}
@@ -336,17 +379,14 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
                   </FormField>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <FormField label="星级">
-                    <StarRating value={form.rating ?? 0} onChange={v => set("rating", v)} />
-                  </FormField>
+                <div className="grid grid-cols-3 gap-3">
                   <FormField label="阅读状态">
                     <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm h-[34px]">
                       {STATUSES.map(({ value, label }) => (
                         <button
                           key={value}
                           type="button"
-                          onClick={() => set("status", form.status === value ? "" : value)}
+                          onClick={() => handleStatusClick(value)}
                           className={`flex-1 cursor-pointer transition-colors ${
                             form.status === value && (form.status as string) !== ""
                               ? value === "want" ? "bg-yellow-100 text-yellow-700 font-medium"
@@ -360,7 +400,22 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
                       ))}
                     </div>
                   </FormField>
+                  <FormField label="开始阅读">
+                    <DateInput value={form.started_at} onChange={v => set("started_at", v)} className={inputCls} />
+                  </FormField>
+                  <FormField label="完成阅读">
+                    <DateInput value={form.finished_at} onChange={v => set("finished_at", v)} className={inputCls} />
+                  </FormField>
                 </div>
+
+                <FormField label="丛书">
+                  <input
+                    value={form.series ?? ""}
+                    onChange={e => set("series", e.target.value || undefined)}
+                    placeholder="丛书或系列名"
+                    className={inputCls}
+                  />
+                </FormField>
 
                 <FormField label="封面图片 URL">
                   <input value={form.cover_url ?? ""} onChange={e => set("cover_url", e.target.value)} className={inputCls} />
@@ -396,14 +451,16 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
                     <div className="w-full h-full flex items-center justify-center text-gray-300 text-3xl">📚</div>
                   )}
                 </div>
+                <div className="mt-2 flex justify-center">
+                  <StarRating value={book.rating ?? 0} readonly />
+                </div>
               </div>
 
               {/* Info */}
               <div className="flex-1 min-w-0">
                 {book.author && <p className="text-gray-700 font-medium">{book.author}</p>}
                 {book.translator && <p className="text-gray-500 text-sm mt-0.5">译者：{book.translator}</p>}
-                <div className="mt-2 flex items-center gap-3">
-                  <StarRating value={book.rating ?? 0} readonly />
+                <div className="mt-2">
                   {statusLabel && (
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                       book.status === "want"    ? "bg-yellow-100 text-yellow-700" :
@@ -421,6 +478,9 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
                   {book.language && <InfoRow label="语言" value={book.language} />}
                   {book.region && <InfoRow label="地域" value={book.region} />}
                   {book.category && <InfoRow label="类别" value={book.category} />}
+                  {book.series && <InfoRow label="丛书" value={book.series} />}
+                  {book.started_at && <InfoRow label="开始阅读" value={book.started_at} />}
+                  {book.finished_at && <InfoRow label="完成阅读" value={book.finished_at} />}
                 </div>
                 {(() => {
                   const tags = parseTags(book.tags ?? "[]");
@@ -451,9 +511,11 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
             </div>
           )}
 
-          <div className="border-t">
-            <ReviewEditor bookId={book.id} />
-          </div>
+          {!editMode && (
+            <div className="border-t">
+              <ReviewEditor bookId={book.id} />
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -478,6 +540,9 @@ function makeForm(book: Book): CreateBook {
     description: book.description ?? "",
     translator: book.translator ?? "",
     status: book.status,
+    started_at: book.started_at,
+    finished_at: book.finished_at,
+    series: book.series ?? "",
   };
 }
 

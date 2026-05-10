@@ -110,6 +110,8 @@ pub async fn fetch(isbn_or_url: &str, cookie: Option<&str>) -> Result<BookMeta> 
         }
     });
 
+    let series = fields.get("丛书").cloned();
+
     Ok(BookMeta {
         title,
         author,
@@ -123,6 +125,7 @@ pub async fn fetch(isbn_or_url: &str, cookie: Option<&str>) -> Result<BookMeta> 
         category: None,
         isbn: isbn_val,
         rating,
+        series,
     })
 }
 

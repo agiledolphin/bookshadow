@@ -132,10 +132,9 @@ export const useBookStore = create<BookStore>((set, get) => ({
   updateBook: async (id, payload) => {
     const book = await invoke<Book>("update_book", { id, payload });
     set((s) => ({
-      books: s.books.map((b) => (b.id === id ? book : b)),
       selectedBook: s.selectedBook?.id === id ? book : s.selectedBook,
     }));
-    get().fetchFilterCounts();
+    get().fetchBooks(true);
     if (book.cover_url) {
       invoke<string>("download_cover", { id: book.id, url: book.cover_url, isbn: book.isbn ?? null })
         .then((localPath) => {

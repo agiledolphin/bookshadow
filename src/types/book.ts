@@ -17,6 +17,9 @@ export interface Book {
   created_at: string;
   updated_at: string;
   status?: string;
+  started_at?: string;
+  finished_at?: string;
+  series?: string;
 }
 
 export interface Review {
@@ -41,6 +44,7 @@ export interface BookMeta {
   category?: string;
   isbn?: string;
   rating?: number;
+  series?: string;
 }
 
 export interface BookFilters {
@@ -72,6 +76,9 @@ export interface CreateBook {
   description?: string;
   translator?: string;
   status?: string;
+  started_at?: string;
+  finished_at?: string;
+  series?: string;
 }
 
 export type UpdateBook = Partial<CreateBook>;

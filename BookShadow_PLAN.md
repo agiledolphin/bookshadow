@@ -300,6 +300,39 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 - [x] 标签补全数据源修复：BookDetail / BookForm 的标签补全改用 `filterCounts.tag`（全库聚合），覆盖面从分页的 40 条扩展到全库；`updateBook` 保存后刷新 `filterCounts`，新增标签即时出现在补全列表
 - [x] `/` 快捷键修复：焦点在排序下拉框（`<select>`）时按 `/` 无法聚焦搜索框，已从排除列表中移除 `SELECT`（`/` 在 select 内无实际作用）
 
+### Phase 16：数据质量完善 ✅（v0.6.0）
+
+**目标**：补全阅读时序与丛书字段，为后续读书分析与书籍推荐提供数据基础。
+
+**新增字段**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `started_at` | TEXT nullable | 开始阅读日期（YYYY-MM-DD）；手动填写，可随时修改 |
+| `finished_at` | TEXT nullable | 完成阅读日期（YYYY-MM-DD）；手动填写，可随时修改 |
+| `series` | TEXT nullable | 丛书/系列名；豆瓣 `#info` 中「丛书」字段自动解析 |
+
+**实施要点**
+
+- [x] Schema 简化：尚无正式发布版本，`db/schema.rs` 直接在 `CREATE TABLE IF NOT EXISTS` 中包含全部列，无需版本号追踪或 `ALTER TABLE` 迁移
+- [x] 同步移除 `page_count`、`original_title`、`douban_id`（价值有限，清理冗余）
+- [x] `SELECT_COLS` 末尾追加 3 列（索引 18-20），`row_to_book` 同步更新；`Book` / `CreateBook` / `UpdateBook` 新增对应字段
+- [x] `update_book` 对 `started_at`/`finished_at` 始终写库（`nullif(?n,'')` 空字符串转 NULL），避免 `push_field!` 宏跳过 `None` 导致无法清空
+- [x] `isbn/douban.rs` 从 `parse_info()` 结果取「丛书」字段，填入 `BookMeta.series`；`BookMeta` 同步新增 `series` 字段
+- [x] 状态-日期联动状态机：「想读」清空两个日期；切「在读」设 `started_at=今日`（若为空）并清 `finished_at`；切「已读」设 `finished_at=今日`（若为空）；取消对应状态则清对应日期
+- [x] `DateInput` 组件：`type="text"` 显示（placeholder `YYYY-MM-DD`）+ 透明 `type="date"` 叠层仅覆盖日历图标区域，避免 WebKit 空值时显示灰色今日
+- [x] UI 调整：星级评分移至封面下方；编辑行布局改为「阅读状态 | 开始阅读 | 完成阅读」三列；编辑模式隐藏书评区
+- [x] 「待完善」提示：`region`、`category`、`language` 三字段任一为空时，编辑按钮旁显示轻提示
+- [x] FTS5 全文索引移除：中文两字词（鲁迅、余华等）在 trigram 分词下无法命中（最少需 3 字），对小型个人库无性能优势；改用 `LIKE` 全覆盖，同步删除 `search.rs` 死代码及 FTS5 触发器/虚拟表
+- [x] 搜索扩展：`LIKE` 条件新增 `publisher`、`series` 两列，覆盖出版社和丛书名搜索
+- [x] 「未设」状态过滤：`""` 为哨兵值，后端映射 `status IS NULL`；`get_filter_counts` 额外统计 `NULL` 数量写入 `status[""]`，FilterPanel 当计数 > 0 时展示「未设」选项
+- [x] `updateBook` 保存后调用 `fetchBooks(true)` 刷新当前过滤结果，避免在过滤状态下编辑书籍后列表不更新
+
+**后续规划**
+
+- Phase 17：读书分析看板（基于 `finished_at` 的年度/月度统计、评分分布、类别地域分布）
+- Phase 18：书籍推荐（基于高分标签/类别对「想读」列表排序；可选 LLM 集成）
+
 ---
 
 ## 七、关键设计决策
@@ -327,7 +360,8 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 
 ## 八、后续可扩展方向
 
+- 读书分析看板（年度/月度阅读统计、评分分布、类别地域分布）→ Phase 17
+- 书籍推荐（基于高分标签/类别排序「想读」列表；可选 LLM 集成）→ Phase 18
 - iCloud / 本地 NAS 同步
-- 阅读进度追踪
 - 借阅记录
 - WebView 方案绕过豆瓣反爬（更彻底，无需手动维护 Cookie）

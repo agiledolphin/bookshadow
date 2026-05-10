@@ -99,6 +99,15 @@ export function FilterPanel() {
             {label}
           </GroupItem>
         ))}
+        {(counts.status[""] ?? 0) > 0 && (
+          <GroupItem
+            active={filters.status === ""}
+            count={counts.status[""] ?? 0}
+            onClick={() => update("status", filters.status === "" ? undefined : "")}
+          >
+            未设
+          </GroupItem>
+        )}
       </FilterGroup>
 
       <FilterGroup label="星级">

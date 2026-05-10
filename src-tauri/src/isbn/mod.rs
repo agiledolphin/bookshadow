@@ -19,6 +19,7 @@ pub struct BookMeta {
     pub category: Option<String>,
     pub isbn: Option<String>,
     pub rating: Option<i32>,
+    pub series: Option<String>,
 }
 
 /// Normalize various date strings to ISO format: "YYYY", "YYYY-MM", or "YYYY-MM-DD".

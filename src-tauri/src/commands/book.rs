@@ -35,6 +35,9 @@ pub struct Book {
     pub created_at: String,
     pub updated_at: String,
     pub status: Option<String>,
+    pub started_at: Option<String>,
+    pub finished_at: Option<String>,
+    pub series: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,6 +56,9 @@ pub struct CreateBook {
     pub description: Option<String>,
     pub translator: Option<String>,
     pub status: Option<String>,
+    pub started_at: Option<String>,
+    pub finished_at: Option<String>,
+    pub series: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -71,6 +77,9 @@ pub struct UpdateBook {
     pub description: Option<String>,
     pub translator: Option<String>,
     pub status: Option<String>,
+    pub started_at: Option<String>,
+    pub finished_at: Option<String>,
+    pub series: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -100,7 +109,7 @@ pub fn resolve_order_by(sort_by: Option<&str>) -> &'static str {
 }
 
 pub const SELECT_COLS: &str =
-    "id,title,author,isbn,publisher,pub_date,language,region,category,tags,rating,cover_url,cover_local,description,translator,created_at,updated_at,status";
+    "id,title,author,isbn,publisher,pub_date,language,region,category,tags,rating,cover_url,cover_local,description,translator,created_at,updated_at,status,started_at,finished_at,series";
 
 pub fn row_to_book(row: &rusqlite::Row<'_>) -> rusqlite::Result<Book> {
     Ok(Book {
@@ -122,6 +131,9 @@ pub fn row_to_book(row: &rusqlite::Row<'_>) -> rusqlite::Result<Book> {
         created_at: row.get(15)?,
         updated_at: row.get(16)?,
         status: row.get(17)?,
+        started_at: row.get(18)?,
+        finished_at: row.get(19)?,
+        series: row.get(20)?,
     })
 }
 
@@ -141,14 +153,21 @@ pub fn get_books(
     if let Some(v) = f.language { conditions.push(format!("language = ?{}", param_values.len() + 1)); param_values.push(Box::new(v)); }
     if let Some(v) = f.region   { conditions.push(format!("region = ?{}", param_values.len() + 1));   param_values.push(Box::new(v)); }
     if let Some(v) = f.category { conditions.push(format!("category = ?{}", param_values.len() + 1)); param_values.push(Box::new(v)); }
-    if let Some(v) = f.status   { conditions.push(format!("status = ?{}", param_values.len() + 1));   param_values.push(Box::new(v)); }
+    if let Some(v) = f.status {
+        if v.is_empty() {
+            conditions.push("status IS NULL".to_string());
+        } else {
+            conditions.push(format!("status = ?{}", param_values.len() + 1));
+            param_values.push(Box::new(v));
+        }
+    }
     if let Some(v) = f.tag     { conditions.push(format!("tags LIKE ?{}", param_values.len() + 1));   param_values.push(Box::new(format!("%\"{}\"%" , v))); }
     if let Some(ref v) = f.search_query {
         let q = v.trim();
         if !q.is_empty() {
             let n = param_values.len() + 1;
             conditions.push(format!(
-                "(title LIKE ?{n} OR author LIKE ?{n} OR translator LIKE ?{n} OR description LIKE ?{n} OR tags LIKE ?{n})"
+                "(title LIKE ?{n} OR author LIKE ?{n} OR translator LIKE ?{n} OR publisher LIKE ?{n} OR description LIKE ?{n} OR tags LIKE ?{n} OR series LIKE ?{n})"
             ));
             param_values.push(Box::new(format!("%{}%", q)));
         }
@@ -222,14 +241,14 @@ pub fn create_book(state: State<'_, DbState>, mut payload: CreateBook) -> Result
     }
 
     conn.execute(
-        "INSERT INTO books (title,author,isbn,publisher,pub_date,language,region,category,tags,rating,cover_url,description,translator,status) \
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+        "INSERT INTO books (title,author,isbn,publisher,pub_date,language,region,category,tags,rating,cover_url,description,translator,status,started_at,finished_at,series) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
         params![
             payload.title, payload.author, payload.isbn, payload.publisher,
             payload.pub_date, payload.language, payload.region, payload.category,
             payload.tags.unwrap_or_else(|| "[]".into()),
             payload.rating, payload.cover_url, payload.description, payload.translator,
-            payload.status
+            payload.status, payload.started_at, payload.finished_at, payload.series
         ],
     )
     .map_err(|e| e.to_string())?;
@@ -278,10 +297,15 @@ pub fn update_book(
     push_field!(payload.cover_url,   "cover_url");
     push_field!(payload.description, "description");
     push_field!(payload.translator,  "translator");
+    push_field!(payload.series, "series");
     if let Some(v) = payload.status {
         sets.push(format!("status=nullif(?{},'')", param_values.len() + 1));
         param_values.push(Box::new(v));
     }
+    sets.push(format!("started_at=nullif(?{},'')", param_values.len() + 1));
+    param_values.push(Box::new(payload.started_at.unwrap_or_default()));
+    sets.push(format!("finished_at=nullif(?{},'')", param_values.len() + 1));
+    param_values.push(Box::new(payload.finished_at.unwrap_or_default()));
     sets.push("updated_at=datetime('now')".into());
 
     let sql = format!("UPDATE books SET {} WHERE id=?1", sets.join(", "));

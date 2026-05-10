@@ -29,7 +29,7 @@ fn build_where(f: &BookFilters, exclude: &str) -> (String, Vec<Box<dyn ToSql>>) 
         if !q.is_empty() {
             let n = params.len() + 1;
             conds.push(format!(
-                "(title LIKE ?{n} OR author LIKE ?{n} OR translator LIKE ?{n} OR description LIKE ?{n} OR tags LIKE ?{n})"
+                "(title LIKE ?{n} OR author LIKE ?{n} OR translator LIKE ?{n} OR publisher LIKE ?{n} OR description LIKE ?{n} OR tags LIKE ?{n} OR series LIKE ?{n})"
             ));
             params.push(Box::new(format!("%{}%", q)));
         }
@@ -37,8 +37,12 @@ fn build_where(f: &BookFilters, exclude: &str) -> (String, Vec<Box<dyn ToSql>>) 
 
     if exclude != "status" {
         if let Some(ref v) = f.status {
-            conds.push(format!("status = ?{}", params.len() + 1));
-            params.push(Box::new(v.clone()));
+            if v.is_empty() {
+                conds.push("status IS NULL".to_string());
+            } else {
+                conds.push(format!("status = ?{}", params.len() + 1));
+                params.push(Box::new(v.clone()));
+            }
         }
     }
     if exclude != "region" {
@@ -229,7 +233,22 @@ pub fn get_filter_counts(
             .map_err(|e| e.to_string())?
     };
 
-    let status   = str_group(&conn, "status",   &f, "status")?;
+    let mut status = str_group(&conn, "status", &f, "status")?;
+    {
+        let (w, owned) = build_where(&f, "status");
+        let null_where = if w.is_empty() {
+            "WHERE status IS NULL".to_string()
+        } else {
+            format!("{} AND status IS NULL", w)
+        };
+        let refs: Vec<&dyn ToSql> = owned.iter().map(|p| p.as_ref()).collect();
+        let n: i64 = conn
+            .query_row(&format!("SELECT COUNT(*) FROM books {null_where}"), refs.as_slice(), |r| r.get(0))
+            .unwrap_or(0);
+        if n > 0 {
+            status.insert("".to_string(), n);
+        }
+    }
     let region   = str_group(&conn, "region",   &f, "region")?;
     let category = str_group(&conn, "category", &f, "category")?;
     let language = str_group(&conn, "language", &f, "language")?;

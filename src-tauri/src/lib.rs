@@ -132,7 +132,6 @@ pub fn run() {
             commands::review::delete_review,
             commands::review::import_review_md,
             commands::export::export_books,
-            commands::search::search_books,
             commands::settings::get_config,
             commands::settings::save_config,
         ])

@@ -25,7 +25,10 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             translator  TEXT,
             status      TEXT,
             created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            started_at  TEXT,
+            finished_at TEXT,
+            series      TEXT
         );
 
         CREATE TABLE IF NOT EXISTS reviews (
@@ -36,31 +39,6 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             created_at  TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
         );
-
-        CREATE VIRTUAL TABLE IF NOT EXISTS books_fts USING fts5(
-            title, author, description, tags,
-            content='books', content_rowid='id',
-            tokenize='trigram'
-        );
-
-        CREATE TRIGGER IF NOT EXISTS books_ai AFTER INSERT ON books BEGIN
-            INSERT INTO books_fts(rowid, title, author, description, tags)
-            VALUES (new.id, new.title, COALESCE(new.author,''), COALESCE(new.description,''), COALESCE(new.tags,''));
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS books_au AFTER UPDATE ON books BEGIN
-            INSERT INTO books_fts(books_fts, rowid, title, author, description, tags)
-            VALUES ('delete', old.id, old.title, COALESCE(old.author,''), COALESCE(old.description,''), COALESCE(old.tags,''));
-            INSERT INTO books_fts(rowid, title, author, description, tags)
-            VALUES (new.id, new.title, COALESCE(new.author,''), COALESCE(new.description,''), COALESCE(new.tags,''));
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS books_ad AFTER DELETE ON books BEGIN
-            INSERT INTO books_fts(books_fts, rowid, title, author, description, tags)
-            VALUES ('delete', old.id, old.title, COALESCE(old.author,''), COALESCE(old.description,''), COALESCE(old.tags,''));
-        END;
-
-        PRAGMA user_version = 2;
         "#,
     )?;
 

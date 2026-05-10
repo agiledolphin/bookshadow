@@ -6,6 +6,7 @@ import { useToastStore } from "../stores/toastStore";
 import { StarRating } from "./StarRating";
 import { TagInput } from "./TagInput";
 import { SearchableSelect } from "./SearchableSelect";
+import { DateInput } from "./DateInput";
 import { LANGUAGES, REGIONS, CATEGORIES, STATUSES } from "../types/book";
 
 interface Props {
@@ -42,6 +43,9 @@ export function BookForm({ book, onClose }: Props) {
     description: book?.description ?? "",
     translator: book?.translator ?? "",
     status: book?.status,
+    started_at: book?.started_at,
+    finished_at: book?.finished_at,
+    series: book?.series ?? "",
   });
   const [isbnInput, setIsbnInput] = useState(book?.isbn ?? "");
   const [isbnSource, setIsbnSource] = useState<"douban" | "google" | "openlibrary" | "auto">("douban");
@@ -75,6 +79,7 @@ export function BookForm({ book, onClose }: Props) {
         category: meta.category ?? f.category,
         isbn: meta.isbn ?? (isDoubanUrl ? "" : isbnInput.trim()),
         rating: meta.rating ?? f.rating,
+        series: meta.series ?? f.series,
       }));
     } catch (e) {
       setFetchError(String(e));
@@ -85,6 +90,32 @@ export function BookForm({ book, onClose }: Props) {
 
   const set = <K extends keyof CreateBook>(key: K, value: CreateBook[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
+
+  const handleStatusClick = (value: string) => {
+    setForm((f) => {
+      const isActive = f.status === value;
+      const newStatus = isActive ? "" : value;
+      const today = new Date().toISOString().split("T")[0];
+      if (isActive) {
+        return {
+          ...f,
+          status: newStatus,
+          started_at:  value === "reading" ? undefined : f.started_at,
+          finished_at: value === "read"    ? undefined : f.finished_at,
+        };
+      }
+      switch (value) {
+        case "want":
+          return { ...f, status: newStatus, started_at: undefined, finished_at: undefined };
+        case "reading":
+          return { ...f, status: newStatus, started_at: f.started_at ?? today, finished_at: undefined };
+        case "read":
+          return { ...f, status: newStatus, finished_at: f.finished_at ?? today };
+        default:
+          return { ...f, status: newStatus };
+      }
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -233,17 +264,18 @@ export function BookForm({ book, onClose }: Props) {
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="星级">
-              <StarRating value={form.rating ?? 0} onChange={(v) => set("rating", v)} />
-            </Field>
+          <Field label="星级">
+            <StarRating value={form.rating ?? 0} onChange={(v) => set("rating", v)} />
+          </Field>
+
+          <div className="grid grid-cols-3 gap-3">
             <Field label="阅读状态">
               <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm h-[34px]">
                 {STATUSES.map(({ value, label }) => (
                   <button
                     key={value}
                     type="button"
-                    onClick={() => set("status", form.status === value ? "" : value)}
+                    onClick={() => handleStatusClick(value)}
                     className={`flex-1 cursor-pointer transition-colors ${
                       form.status === value && (form.status as string) !== ""
                         ? value === "want" ? "bg-yellow-100 text-yellow-700 font-medium"
@@ -257,7 +289,22 @@ export function BookForm({ book, onClose }: Props) {
                 ))}
               </div>
             </Field>
+            <Field label="开始阅读">
+              <DateInput value={form.started_at} onChange={(v) => set("started_at", v)} className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </Field>
+            <Field label="完成阅读">
+              <DateInput value={form.finished_at} onChange={(v) => set("finished_at", v)} className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </Field>
           </div>
+
+          <Field label="丛书">
+            <input
+              value={form.series ?? ""}
+              onChange={(e) => set("series", e.target.value || undefined)}
+              placeholder="丛书或系列名"
+              className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </Field>
 
           <Field label="封面图片 URL">
             <input

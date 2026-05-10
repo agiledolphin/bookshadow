@@ -140,5 +140,6 @@ pub async fn fetch(isbn: &str) -> Result<BookMeta> {
         language,
         isbn: Some(isbn.to_string()),
         rating: None,
+        series: None,
     })
 }
