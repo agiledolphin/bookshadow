@@ -328,9 +328,29 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 - [x] 「未设」状态过滤：`""` 为哨兵值，后端映射 `status IS NULL`；`get_filter_counts` 额外统计 `NULL` 数量写入 `status[""]`，FilterPanel 当计数 > 0 时展示「未设」选项
 - [x] `updateBook` 保存后调用 `fetchBooks(true)` 刷新当前过滤结果，避免在过滤状态下编辑书籍后列表不更新
 
+### Phase 17：读书分析看板 ✅（v0.7.0）
+
+**目标**：基于 `finished_at` 的年度阅读趋势及全库类别、地域分布可视化。
+
+**实施要点**
+
+- [x] `get_stats` Rust 命令：`StatusCounts`（总/已读/在读/想读/未设）、`YearCount`（按 `finished_at` 年份 GROUP BY）、`LabelCount`（类别/地域 GROUP BY，只统计有值的行）
+- [x] `stats` 模块注册到 `lib.rs` invoke handler
+- [x] Zustand：`stats: ReadingStats | null`；`setViewMode("stats")` 时自动调用 `fetchStats`
+- [x] `StatsPanel` 组件：KPI 卡片（总藏书/已读/在读/想读/未设）+ Tab（阅读趋势 / 类别分布 / 地域分布）
+- [x] `TrendChart`（SVG）：真实时间轴（x 正比于年份）；5 年网格线作背景参考；仅绘制有数据年份的柱；hover 高亮柱体，底部显示蓝色年份文字；水平滚动 + 居中布局（`display:table; margin:0 auto`）
+- [x] `HorizontalBarChart`：标签（w-16）+ 进度条（flex-1）+ 数量（w-6）+ 占比%（w-8）；「未设」灰色排末尾
+- [x] 工具栏重构：四组分隔设计 `[搜索/排序/⊞|≡] │ [📊] │ [↑][+] │ [⚙]`；统计看板从视图切换组独立出来，语义清晰
+- [x] 统计模式下工具栏位置不变（始终渲染 w-36 占位块，切 stats 时只移除 border-r）；聚焦搜索框自动切回网格视图
+- [x] `get_filter_counts` `str_group` 改用 `COALESCE(NULLIF(col,''),'')` 同时纳入 NULL 和空字符串；region/category 空字符串过滤映射 `IS NULL OR = ''`，同步修复 `book.rs` 主查询；地域/类别「未设」归入「其他」折叠区末尾显示
+- [x] `push_field!` 宏改用 `NULLIF(?,'')`，编辑保存时空字符串自动转 NULL，从源头杜绝脏数据入库；存量空字符串一次性清理为 NULL
+- [x] Google Books `map_category` 重写：原"科技"桶不在 CATEGORIES 中，拆分为"计算机"、"数学"、"物理"、"医学"、"自然科学"、"科普"；`psychology` → "心理"，`political` → "政治"，`marketing` → "市场"，`music/design/architect` 各自独立；新增"漫画"、"生活"、"军事"、"语言"、"宗教"映射
+- [x] 豆瓣 Cookie 失效检测：`douban::fetch` 检查最终跳转 URL 是否含 `accounts.douban.com` / `/login`，并二次校验 HTML 内容；有 Cookie 时失效直接返回 `Err`；自动级联模式下 Cookie 失效错误上抛，不 fall-through 到 Google Books
+- [x] 新增类别：军事、宗教；新增地域：巴基斯坦、白俄罗斯；`nationality_to_region` 同步扩充
+- [x] 豆瓣登录窗口（macOS）：设置页新增「打开豆瓣登录窗口（自动提取）」按钮；在 WebView 内完成登录后，通过 macOS 原生 `WKHTTPCookieStore.getAllCookies`（`objc2-web-kit` 绑定）从 WKWebView 内部读取 `douban.com` Cookie，自动写入 `config.json` 并关闭窗口；绕过 CSP 对 `fetch` 的限制，无需用户手动从 DevTools 复制 Cookie
+
 **后续规划**
 
-- Phase 17：读书分析看板（基于 `finished_at` 的年度/月度统计、评分分布、类别地域分布）
 - Phase 18：书籍推荐（基于高分标签/类别对「想读」列表排序；可选 LLM 集成）
 
 ---
@@ -343,6 +363,8 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 | `bookcover://` 自定义协议 | 安全地服务本地封面，防路径穿越 |
 | `data-tauri-drag-region` 需显式声明 `core:window:allow-start-dragging` | 不在 `core:default` 中，需手动加入 capabilities |
 | 豆瓣 Cookie 存 config.json | 避免硬编码，用户可自行更新过期 Cookie |
+| 豆瓣 Cookie 失效检测 via 跳转 URL | 响应 URL 含 `accounts.douban.com`/`/login` 即判定失效，优先于 HTML 内容解析；有 Cookie 时失效错误上抛，无 Cookie 时静默 fallback |
+| `push_field!` 用 `NULLIF(?,'')`  | 编辑清空字段后保存会产生空字符串而非 NULL；统一在写入层转换，无需前端额外校验 |
 | 批量导入扫码并行 + 抓取串行 | 扫码是本地 CPU 任务可并行；网络请求串行避免触发豆瓣频率限制 |
 | 豆瓣支持 subject URL 直链 | `/isbn/` 端点存在同 ISBN 多条记录时只返回一条，直链可精确指定版本 |
 | BookDetail 内联编辑 | 减少弹层嵌套，编辑时封面可见，书评区始终可访问 |
@@ -355,13 +377,12 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 | `sanitize_isbn` 校验 ISBN 格式 | isbn 字段存入豆瓣 URL 时，`upload_cover` / `download_cover` 拼出含 `/` 的非法路径，导致"No such file or directory"；在保存层统一清洗，从源头防止脏数据入库 |
 | `SearchableSelect` 替换地域/类别下拉 | 地域 40+ 项、类别 26 项，原生 select 滚动体验差；可搜索下拉输入 1-2 字即可过滤，与标签输入体验一致，组件在 BookForm / BookDetail 复用 |
 | 批量导入后调用 `refreshAllBooks` | `fetchBooks` 只更新分页列表 `books`，筛选面板依赖 `allBooks`；导入后需额外刷新 `allBooks` 才能更新筛选计数 |
+| 豆瓣 Cookie 提取用 `WKHTTPCookieStore.getAllCookies` | `eval()` 单向（Rust→JS），`fetch` 被 CSP 拦截，`location.hash` 被 SPA 重置；唯一可行路径是通过 `with_webview` 拿到 WKWebView 指针，调用原生 cookie store；completion block 用 `Mutex<Option<Sender>>` 包装以满足 `Fn` 约束 |
 
 ---
 
 ## 八、后续可扩展方向
 
-- 读书分析看板（年度/月度阅读统计、评分分布、类别地域分布）→ Phase 17
 - 书籍推荐（基于高分标签/类别排序「想读」列表；可选 LLM 集成）→ Phase 18
 - iCloud / 本地 NAS 同步
 - 借阅记录
-- WebView 方案绕过豆瓣反爬（更彻底，无需手动维护 Cookie）

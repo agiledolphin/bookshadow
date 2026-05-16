@@ -47,14 +47,22 @@ fn build_where(f: &BookFilters, exclude: &str) -> (String, Vec<Box<dyn ToSql>>) 
     }
     if exclude != "region" {
         if let Some(ref v) = f.region {
-            conds.push(format!("region = ?{}", params.len() + 1));
-            params.push(Box::new(v.clone()));
+            if v.is_empty() {
+                conds.push("(region IS NULL OR region = '')".to_string());
+            } else {
+                conds.push(format!("region = ?{}", params.len() + 1));
+                params.push(Box::new(v.clone()));
+            }
         }
     }
     if exclude != "category" {
         if let Some(ref v) = f.category {
-            conds.push(format!("category = ?{}", params.len() + 1));
-            params.push(Box::new(v.clone()));
+            if v.is_empty() {
+                conds.push("(category IS NULL OR category = '')".to_string());
+            } else {
+                conds.push(format!("category = ?{}", params.len() + 1));
+                params.push(Box::new(v.clone()));
+            }
         }
     }
     if exclude != "language" {
@@ -103,12 +111,10 @@ fn str_group(
     exclude: &str,
 ) -> Result<HashMap<String, i64>, String> {
     let (w, owned) = build_where(f, exclude);
-    let full_where = if w.is_empty() {
-        format!("WHERE {} IS NOT NULL", col)
-    } else {
-        format!("{} AND {} IS NOT NULL", w, col)
-    };
-    let sql = format!("SELECT {col}, COUNT(*) FROM books {full_where} GROUP BY {col}");
+    let full_where = if w.is_empty() { String::new() } else { w };
+    let sql = format!(
+        "SELECT COALESCE(NULLIF({col},''),''), COUNT(*) FROM books {full_where} GROUP BY COALESCE(NULLIF({col},''),'')"
+    );
     let refs: Vec<&dyn ToSql> = owned.iter().map(|p| p.as_ref()).collect();
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
     let mut map = HashMap::new();

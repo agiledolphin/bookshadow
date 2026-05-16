@@ -63,31 +63,67 @@ fn map_category(cats: &[String]) -> Option<String> {
             "传记"
         } else if lower.contains("histor") {
             "历史"
-        } else if lower.contains("science") || lower.contains("technolog")
-            || lower.contains("computer") || lower.contains("engineer")
-            || lower.contains("mathemat") || lower.contains("physic")
-            || lower.contains("chemistr") || lower.contains("biolog")
-            || lower.contains("medic") || lower.contains("natur") {
-            "科技"
         } else if lower.contains("philosoph") {
             "哲学"
-        } else if lower.contains("psycholog") || lower.contains("social science")
-            || lower.contains("sociology") || lower.contains("political")
-            || lower.contains("self-help") || lower.contains("self help")
-            || lower.contains("law") || lower.contains("education") {
-            "社科"
+        } else if lower.contains("religion") || lower.contains("spiritual")
+            || lower.contains("theology") || lower.contains("buddhis")
+            || lower.contains("islam") || lower.contains("christianit") {
+            "宗教"
+        } else if lower.contains("psycholog") {
+            "心理"
+        } else if lower.contains("political") || lower.contains("politics") {
+            "政治"
+        } else if lower.contains("military") || lower.contains("war") {
+            "军事"
+        } else if lower.contains("computer") || lower.contains("software")
+            || lower.contains("programming") || lower.contains("technolog")
+            || lower.contains("engineer") {
+            "计算机"
+        } else if lower.contains("mathemat") {
+            "数学"
+        } else if lower.contains("physic") {
+            "物理"
+        } else if lower.contains("medic") || lower.contains("health") {
+            "医学"
+        } else if lower.contains("popular science") || lower.contains("science for")
+            || lower.contains("popular") {
+            "科普"
+        } else if lower.contains("natur") || lower.contains("biolog")
+            || lower.contains("chemistr") || lower.contains("astronom")
+            || lower.contains("science") {
+            "自然科学"
+        } else if lower.contains("architect") {
+            "建筑"
+        } else if lower.contains("music") {
+            "音乐"
+        } else if lower.contains("design") {
+            "设计"
+        } else if lower.contains("art") || lower.contains("photograph")
+            || lower.contains("perform") {
+            "艺术"
+        } else if lower.contains("comic") || lower.contains("manga")
+            || lower.contains("graphic novel") {
+            "漫画"
+        } else if lower.contains("marketing") {
+            "市场"
         } else if lower.contains("business") || lower.contains("econom")
             || lower.contains("financ") || lower.contains("management")
-            || lower.contains("investing") || lower.contains("marketing") {
+            || lower.contains("investing") {
             "经济"
-        } else if lower.contains("art") || lower.contains("music")
-            || lower.contains("design") || lower.contains("photograph")
-            || lower.contains("architect") || lower.contains("perform") {
-            "艺术"
+        } else if lower.contains("social science") || lower.contains("sociology")
+            || lower.contains("law") || lower.contains("education") {
+            "社科"
+        } else if lower.contains("cooking") || lower.contains("travel")
+            || lower.contains("lifestyle") || lower.contains("sport")
+            || lower.contains("self-help") || lower.contains("self help") {
+            "生活"
+        } else if lower.contains("poetry") {
+            "诗歌"
+        } else if lower.contains("language arts") || lower.contains("linguistics") {
+            "语言"
         } else if lower.contains("literary") || lower.contains("literature")
-            || lower.contains("language arts") || lower.contains("poetry")
             || lower.contains("drama") || lower.contains("writing")
-            || lower.contains("rhetoric") || lower.contains("reference") {
+            || lower.contains("rhetoric") {
             "文学"
         } else {
             continue;

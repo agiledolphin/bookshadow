@@ -4,7 +4,6 @@ import { LANGUAGES, PRIMARY_REGIONS, PRIMARY_CATEGORIES, RATINGS, STATUSES } fro
 
 export function FilterPanel() {
   const { filters, filterCounts, setFilters } = useBookStore();
-  const resetAll = () => setFilters({});
   const [otherOpen, setOtherOpen] = useState(false);
   const [otherCategoryOpen, setOtherCategoryOpen] = useState(false);
 
@@ -26,12 +25,16 @@ export function FilterPanel() {
 
   const otherRegions = useMemo(() => {
     const primarySet = new Set<string>(PRIMARY_REGIONS);
-    return Object.keys(counts.region).filter((r) => !primarySet.has(r)).sort();
+    const others = Object.keys(counts.region).filter((r) => !primarySet.has(r) && r !== "").sort();
+    if ((counts.region[""] ?? 0) > 0) others.push("");
+    return others;
   }, [counts.region]);
 
   const otherCategories = useMemo(() => {
     const primarySet = new Set<string>(PRIMARY_CATEGORIES);
-    return Object.keys(counts.category).filter((c) => !primarySet.has(c)).sort();
+    const others = Object.keys(counts.category).filter((c) => !primarySet.has(c) && c !== "").sort();
+    if ((counts.category[""] ?? 0) > 0) others.push("");
+    return others;
   }, [counts.category]);
 
   const activeRegionIsOther =
@@ -44,32 +47,6 @@ export function FilterPanel() {
 
   return (
     <aside className="w-36 shrink-0 flex flex-col border-r border-gray-100 bg-white">
-      {/* Traffic-light drag region + brand */}
-      <div
-        data-tauri-drag-region
-        className="flex items-center justify-center px-2 pt-9 pb-3 border-b border-gray-100 shrink-0 select-none"
-      >
-        <button
-          onClick={resetAll}
-          title="回到全部（ESC）"
-          className="flex items-center gap-2.5 cursor-pointer hover:opacity-70 transition-opacity"
-        >
-          {/* Left: icon + 书影 */}
-          <div className="flex flex-col items-center gap-1 leading-none">
-            <svg viewBox="0 0 24 24" className="w-5 h-5 text-gray-600 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 6.5C2 5.12 3.12 4 4.5 4H12v16H4.5A2.5 2.5 0 0 1 2 17.5v-11Z" />
-              <path d="M12 4h7.5C20.88 4 22 5.12 22 6.5v11A2.5 2.5 0 0 1 19.5 20H12V4Z" />
-              <path d="M12 4v16" />
-            </svg>
-            <span className="text-[11px] font-bold tracking-[0.18em] text-gray-800">书影</span>
-          </div>
-          {/* Right: BOOK / SHADOW */}
-          <div className="flex flex-col leading-none gap-0.5">
-            <span className="text-[11px] font-light tracking-[0.22em] text-gray-800 uppercase">BOOK</span>
-            <span className="text-[11px] font-bold tracking-[0.1em] text-gray-800 uppercase">SHADOW</span>
-          </div>
-        </button>
-      </div>
 
       <div className="flex-1 overflow-y-auto">
       <div className="px-2.5 pt-4 pb-1">
@@ -151,13 +128,13 @@ export function FilterPanel() {
               <div className="bg-gray-50 border-t border-gray-100">
                 {otherRegions.map((r) => (
                   <GroupItem
-                    key={r}
+                    key={r || "__unset__"}
                     active={filters.region === r}
                     count={counts.region[r] ?? 0}
                     onClick={() => update("region", filters.region === r ? undefined : r)}
                     indent
                   >
-                    {r}
+                    {r || "未设"}
                   </GroupItem>
                 ))}
               </div>
@@ -196,13 +173,13 @@ export function FilterPanel() {
               <div className="bg-gray-50 border-t border-gray-100">
                 {otherCategories.map((c) => (
                   <GroupItem
-                    key={c}
+                    key={c || "__unset__"}
                     active={filters.category === c}
                     count={counts.category[c] ?? 0}
                     onClick={() => update("category", filters.category === c ? undefined : c)}
                     indent
                   >
-                    {c}
+                    {c || "未设"}
                   </GroupItem>
                 ))}
               </div>

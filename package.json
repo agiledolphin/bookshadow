@@ -1,7 +1,7 @@
 {
   "name": "bookshadow",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -23,6 +23,7 @@
     "lucide-react": "^1.8.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "sharp": "^0.34.5",
     "tailwind-merge": "^3.5.0",
     "zustand": "^5.0.12"
   },

@@ -134,6 +134,8 @@ pub fn run() {
             commands::export::export_books,
             commands::settings::get_config,
             commands::settings::save_config,
+            commands::settings::open_douban_login,
+            commands::stats::get_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

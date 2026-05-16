@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import type { Book, BookFilters, FilterCounts, CreateBook, UpdateBook, Review, CreateReview, ViewMode } from "../types/book";
+import type { Book, BookFilters, FilterCounts, CreateBook, UpdateBook, Review, CreateReview, ViewMode, ReadingStats } from "../types/book";
 
 const PAGE_SIZE = 40;
 
@@ -16,6 +16,7 @@ interface BookStore {
   hasMore: boolean;
   error: string | null;
   coverNonce: Record<number, number>;
+  stats: ReadingStats | null;
 
   // actions
   fetchBooks: (reset?: boolean) => Promise<void>;
@@ -30,6 +31,7 @@ interface BookStore {
   setFilters: (filters: BookFilters) => void;
   setSortBy: (sortBy: string) => void;
   setViewMode: (mode: ViewMode) => void;
+  fetchStats: () => Promise<void>;
 
   fetchReviews: (bookId: number) => Promise<void>;
   createReview: (payload: CreateReview) => Promise<Review>;
@@ -45,6 +47,7 @@ export const useBookStore = create<BookStore>((set, get) => ({
   reviews: [],
   filters: {},
   filterCounts: null,
+  stats: null,
   viewMode: "grid",
   loading: false,
   isLoadingMore: false,
@@ -172,7 +175,19 @@ export const useBookStore = create<BookStore>((set, get) => ({
     get().fetchBooks(true);
   },
 
-  setViewMode: (mode) => set({ viewMode: mode }),
+  setViewMode: (mode) => {
+    set({ viewMode: mode });
+    if (mode === "stats") get().fetchStats();
+  },
+
+  fetchStats: async () => {
+    try {
+      const stats = await invoke<ReadingStats>("get_stats");
+      set({ stats });
+    } catch (e) {
+      console.warn("fetchStats failed:", e);
+    }
+  },
 
   fetchReviews: async (bookId) => {
     const reviews = await invoke<Review[]>("get_reviews", { bookId });

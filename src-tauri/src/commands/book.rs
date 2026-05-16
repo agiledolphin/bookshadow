@@ -151,8 +151,14 @@ pub fn get_books(
 
     if let Some(v) = f.rating   { conditions.push(format!("rating >= ?{}", param_values.len() + 1));   param_values.push(Box::new(v)); }
     if let Some(v) = f.language { conditions.push(format!("language = ?{}", param_values.len() + 1)); param_values.push(Box::new(v)); }
-    if let Some(v) = f.region   { conditions.push(format!("region = ?{}", param_values.len() + 1));   param_values.push(Box::new(v)); }
-    if let Some(v) = f.category { conditions.push(format!("category = ?{}", param_values.len() + 1)); param_values.push(Box::new(v)); }
+    if let Some(v) = f.region {
+        if v.is_empty() { conditions.push("(region IS NULL OR region = '')".to_string()); }
+        else { conditions.push(format!("region = ?{}", param_values.len() + 1)); param_values.push(Box::new(v)); }
+    }
+    if let Some(v) = f.category {
+        if v.is_empty() { conditions.push("(category IS NULL OR category = '')".to_string()); }
+        else { conditions.push(format!("category = ?{}", param_values.len() + 1)); param_values.push(Box::new(v)); }
+    }
     if let Some(v) = f.status {
         if v.is_empty() {
             conditions.push("status IS NULL".to_string());
@@ -278,7 +284,7 @@ pub fn update_book(
     macro_rules! push_field {
         ($val:expr, $col:expr) => {
             if let Some(v) = $val {
-                sets.push(format!("{}=?{}", $col, param_values.len() + 1));
+                sets.push(format!("{}=NULLIF(?{},'')", $col, param_values.len() + 1));
                 param_values.push(Box::new(v));
             }
         };

@@ -27,6 +27,7 @@ fn resolve_url(isbn_or_url: &str) -> String {
 
 pub async fn fetch(isbn_or_url: &str, cookie: Option<&str>) -> Result<BookMeta> {
     let url = resolve_url(isbn_or_url);
+    let has_cookie = cookie.map_or(false, |s| !s.trim().is_empty());
 
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
@@ -43,11 +44,24 @@ pub async fn fetch(isbn_or_url: &str, cookie: Option<&str>) -> Result<BookMeta> 
     }
     let resp = req.send().await?;
 
+    // 有 Cookie 时检测是否被重定向到登录页（Cookie 失效的典型表现）
+    if has_cookie {
+        let final_url = resp.url().as_str();
+        if final_url.contains("accounts.douban.com") || final_url.contains("/login") {
+            anyhow::bail!("豆瓣 Cookie 已失效，请在设置中更新 Cookie");
+        }
+    }
+
     if !resp.status().is_success() {
         return Ok(BookMeta::default());
     }
 
     let html = resp.text().await?;
+
+    // 二次检查：HTML 明确包含登录跳转标记
+    if has_cookie && html.contains("accounts.douban.com/passport/login") {
+        anyhow::bail!("豆瓣 Cookie 已失效，请在设置中更新 Cookie");
+    }
     let doc = Html::parse_document(&html);
 
     // 书名
@@ -302,6 +316,8 @@ fn nationality_to_region(abbr: &str) -> Option<String> {
         "泰" | "泰国"                   => "泰国",
         "越" | "越南"                   => "越南",
         "缅" | "缅甸"                   => "缅甸",
+        "巴基斯坦"                      => "巴基斯坦",
+        "白俄" | "白俄罗斯"             => "白俄罗斯",
         _ => return None,
     };
     Some(region.to_string())

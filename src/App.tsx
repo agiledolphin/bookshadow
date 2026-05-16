@@ -9,11 +9,12 @@ import { BookDetail } from "./components/BookDetail";
 import { BookForm } from "./components/BookForm";
 import { SettingsModal } from "./components/SettingsModal";
 import { BatchImportModal } from "./components/BatchImportModal";
+import { StatsPanel } from "./components/StatsPanel";
 import { Toast } from "./components/Toast";
 import "./App.css";
 
 export default function App() {
-  const { books, filters, viewMode, loading, hasMore, isLoadingMore, fetchBooks, loadMoreBooks, setSearchQuery, setFilters, setViewMode, setSortBy, deleteBook } = useBookStore();
+  const { books, filters, viewMode, stats, loading, hasMore, isLoadingMore, fetchBooks, loadMoreBooks, setSearchQuery, setFilters, setViewMode, setSortBy, deleteBook } = useBookStore();
   const { addToast } = useToastStore();
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -98,12 +99,12 @@ export default function App() {
   }, [setSearchQuery]);
 
   return (
-    <div className="flex h-screen bg-white select-none overflow-hidden">
-      <FilterPanel />
-
-      <div className="flex-1 flex flex-col min-h-0">
-        {/* Toolbar */}
-        <header data-tauri-drag-region className="flex items-center gap-3 px-4 py-2 border-b border-gray-100 bg-white shrink-0">
+    <div className="flex flex-col h-screen bg-white select-none overflow-hidden">
+      {/* Top bar — single border-b spans full width */}
+      <div className="flex shrink-0 border-b border-gray-100 bg-white">
+        <div data-tauri-drag-region className={`w-36 shrink-0 ${viewMode !== "stats" ? "border-r border-gray-100" : ""}`} />
+        <header data-tauri-drag-region className="flex-1 flex items-center gap-2 px-4 py-2">
+          {/* Group 1: browsing tools */}
           <div className="flex-1 max-w-sm relative">
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -113,6 +114,7 @@ export default function App() {
               type="text"
               value={query}
               onChange={(e) => handleSearch(e.target.value)}
+              onFocus={() => { if (viewMode === "stats") setViewMode("grid"); }}
               onKeyDown={(e) => { if (e.key === "Escape") handleSearch(""); }}
               placeholder="搜索书名、作者、简介…"
               className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
@@ -153,6 +155,22 @@ export default function App() {
             </button>
           </div>
 
+          <div className="h-4 w-px bg-gray-200 shrink-0" />
+
+          {/* Group 2: analytics */}
+          <button
+            onClick={() => setViewMode(viewMode === "stats" ? "grid" : "stats")}
+            title="统计看板"
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === "stats" ? "bg-blue-100 text-blue-600" : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"}`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          </button>
+
+          <div className="h-4 w-px bg-gray-200 shrink-0" />
+
+          {/* Group 3: content actions */}
           <button
             onClick={() => setShowBatchImport(true)}
             title="批量导入"
@@ -173,6 +191,9 @@ export default function App() {
             </svg>
           </button>
 
+          <div className="h-4 w-px bg-gray-200 shrink-0" />
+
+          {/* Group 4: settings */}
           <button
             onClick={() => setShowSettings(true)}
             title="设置"
@@ -183,10 +204,43 @@ export default function App() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           </button>
+
+          {/* Brand — pushed to right edge */}
+          <button
+            onClick={() => { setFilters({}); if (viewMode === "stats") setViewMode("grid"); }}
+            title="回到全部（ESC）"
+            className="flex items-center gap-2 ml-auto cursor-pointer hover:opacity-70 transition-opacity select-none"
+          >
+            <div className="flex flex-col items-center gap-0.5 leading-none">
+              <svg viewBox="0 0 24 24" className="w-4 h-4 text-gray-600 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 6.5C2 5.12 3.12 4 4.5 4H12v16H4.5A2.5 2.5 0 0 1 2 17.5v-11Z" />
+                <path d="M12 4h7.5C20.88 4 22 5.12 22 6.5v11A2.5 2.5 0 0 1 19.5 20H12V4Z" />
+                <path d="M12 4v16" />
+              </svg>
+              <span className="text-[10px] font-bold tracking-[0.18em] text-gray-800">书影</span>
+            </div>
+            <div className="flex flex-col leading-none gap-0.5">
+              <span className="text-[10px] font-light tracking-[0.22em] text-gray-800 uppercase">BOOK</span>
+              <span className="text-[10px] font-bold tracking-[0.1em] text-gray-800 uppercase">SHADOW</span>
+            </div>
+          </button>
         </header>
+      </div>
+
+      {/* Body */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {viewMode !== "stats" && <FilterPanel />}
 
         <main className="flex-1 min-h-0 flex flex-col min-w-0">
-          {loading ? (
+          {viewMode === "stats" ? (
+            stats ? (
+              <StatsPanel stats={stats} />
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-gray-400">
+                <span className="text-sm">加载中…</span>
+              </div>
+            )
+          ) : loading ? (
             <div className="flex-1 flex items-center justify-center text-gray-400">
               <span className="text-sm">加载中…</span>
             </div>

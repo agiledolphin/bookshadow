@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { save } from "@tauri-apps/plugin-dialog";
 import { useToastStore } from "../stores/toastStore";
 
@@ -18,13 +19,34 @@ export function SettingsModal({ onClose }: Props) {
   const [saved, setSaved] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [showCookie, setShowCookie] = useState(false);
+  const [loggingIn, setLoggingIn] = useState(false);
   const { addToast } = useToastStore();
 
   useEffect(() => {
     invoke<AppConfig>("get_config").then(setConfig).catch(() => {});
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+
+    let unlistenUpdated: (() => void) | undefined;
+    let unlistenClosed: (() => void) | undefined;
+
+    listen<void>("douban-cookie-updated", () => {
+      invoke<AppConfig>("get_config").then((cfg) => {
+        setConfig(cfg);
+        addToast("豆瓣 Cookie 已自动保存");
+      }).catch(() => {}).finally(() => setLoggingIn(false));
+    }).then((fn) => { unlistenUpdated = fn; });
+
+    listen<void>("douban-login-closed", () => {
+      setLoggingIn(false);
+      addToast("Cookie 未自动提取，可手动粘贴至输入框");
+    }).then((fn) => { unlistenClosed = fn; });
+
+    return () => {
+      window.removeEventListener("keydown", handler);
+      unlistenUpdated?.();
+      unlistenClosed?.();
+    };
   }, [onClose]);
 
   const handleExport = async (format: "json" | "csv") => {
@@ -38,6 +60,16 @@ export function SettingsModal({ onClose }: Props) {
       addToast(`已导出 ${format.toUpperCase()}`);
     } catch (err) {
       addToast(String(err));
+    }
+  };
+
+  const handleDoubanLogin = async () => {
+    setLoggingIn(true);
+    try {
+      await invoke("open_douban_login");
+    } catch (e) {
+      setLoggingIn(false);
+      addToast(String(e));
     }
   };
 
@@ -138,6 +170,14 @@ export function SettingsModal({ onClose }: Props) {
             <p className="text-xs text-gray-400">
               浏览器登录豆瓣后，打开开发者工具 → Network → 任意请求 → Headers → Cookie，复制完整值粘贴此处。
             </p>
+            <button
+              type="button"
+              onClick={handleDoubanLogin}
+              disabled={loggingIn}
+              className="mt-0.5 self-start px-3 py-1.5 text-xs bg-green-50 text-green-700 border border-green-200 rounded-lg hover:bg-green-100 disabled:opacity-60 transition-colors cursor-pointer"
+            >
+              {loggingIn ? "等待登录中…" : "打开豆瓣登录窗口（自动提取）"}
+            </button>
           </div>
           <div className="border-t border-gray-100 pt-5 flex flex-col gap-1.5">
             <label className="text-sm font-medium text-gray-700">数据导出</label>

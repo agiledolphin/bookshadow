@@ -100,8 +100,10 @@ pub async fn fetch_by_isbn(isbn: &str, source: Option<&str>, google_api_key: Opt
         Some("google") => fetch_single(google_books::fetch(isbn, google_api_key).await?, "Google Books"),
         Some("openlibrary") => fetch_single(open_library::fetch(isbn).await?, "Open Library"),
         _ => {
-            if let Ok(meta) = douban::fetch(isbn, douban_cookie).await {
-                if meta.title.is_some() { return Ok(meta); }
+            match douban::fetch(isbn, douban_cookie).await {
+                Ok(meta) if meta.title.is_some() => return Ok(meta),
+                Err(e) if e.to_string().contains("Cookie 已失效") => return Err(e),
+                _ => {}
             }
             if let Ok(meta) = google_books::fetch(isbn, google_api_key).await {
                 if meta.title.is_some() { return Ok(meta); }
