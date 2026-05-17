@@ -14,7 +14,7 @@ import { Toast } from "./components/Toast";
 import "./App.css";
 
 export default function App() {
-  const { books, filters, viewMode, stats, loading, hasMore, isLoadingMore, fetchBooks, loadMoreBooks, setSearchQuery, setFilters, setViewMode, setSortBy, deleteBook } = useBookStore();
+  const { books, filters, viewMode, stats, loading, hasMore, isLoadingMore, fetchBooks, loadMoreBooks, setSearchQuery, setFilters, setViewMode, setSortBy, deleteBook, recommendations, recommendationsLoading, fetchRecommendations, clearRecommendations } = useBookStore();
   const { addToast } = useToastStore();
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -81,6 +81,24 @@ export default function App() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [selectedBook, showForm, showSettings, showBatchImport, setFilters]);
+
+  // Clear recommendations when leaving 'want' filter
+  useEffect(() => {
+    if (filters.status !== "want") clearRecommendations();
+  }, [filters.status, clearRecommendations]);
+
+  // Sort books by recommendation score when active
+  const displayBooks = recommendations && filters.status === "want"
+    ? [...books].sort((a, b) => (recommendations[b.id]?.score ?? -1) - (recommendations[a.id]?.score ?? -1))
+    : books;
+
+  const handleRecommend = async () => {
+    try {
+      await fetchRecommendations();
+    } catch (e) {
+      addToast(String(e));
+    }
+  };
 
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -157,7 +175,7 @@ export default function App() {
 
           <div className="h-4 w-px bg-gray-200 shrink-0" />
 
-          {/* Group 2: analytics */}
+          {/* Group 2: analytics + AI */}
           <button
             onClick={() => setViewMode(viewMode === "stats" ? "grid" : "stats")}
             title="统计看板"
@@ -167,6 +185,24 @@ export default function App() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
           </button>
+
+          {filters.status === "want" && (
+            <button
+              onClick={recommendations ? clearRecommendations : handleRecommend}
+              disabled={recommendationsLoading}
+              title={recommendations ? "清除推荐排序" : "AI 推荐排序"}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors cursor-pointer disabled:opacity-50 ${
+                recommendations
+                  ? "bg-purple-100 text-purple-600 hover:bg-purple-200"
+                  : "text-gray-400 hover:text-purple-600 hover:bg-purple-50"
+              }`}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              {recommendationsLoading ? "分析中…" : recommendations ? "已推荐排序" : "AI 推荐"}
+            </button>
+          )}
 
           <div className="h-4 w-px bg-gray-200 shrink-0" />
 
@@ -245,9 +281,9 @@ export default function App() {
               <span className="text-sm">加载中…</span>
             </div>
           ) : viewMode === "grid" ? (
-            <BookGrid books={books} hasMore={hasMore} isLoadingMore={isLoadingMore} onSelect={setSelectedBook} onDelete={handleDelete} onLoadMore={loadMoreBooks} />
+            <BookGrid books={displayBooks} hasMore={hasMore} isLoadingMore={isLoadingMore} onSelect={setSelectedBook} onDelete={handleDelete} onLoadMore={loadMoreBooks} />
           ) : (
-            <BookList books={books} hasMore={hasMore} isLoadingMore={isLoadingMore} onSelect={setSelectedBook} onDelete={handleDelete} onLoadMore={loadMoreBooks} />
+            <BookList books={displayBooks} hasMore={hasMore} isLoadingMore={isLoadingMore} onSelect={setSelectedBook} onDelete={handleDelete} onLoadMore={loadMoreBooks} />
           )}
         </main>
       </div>

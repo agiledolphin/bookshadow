@@ -108,6 +108,18 @@ export interface FilterCounts {
   tag: Record<string, number>;
 }
 
+export interface BookRecommendation {
+  id: number;
+  score: number;
+  reason: string;
+}
+
+export interface MetadataSuggestion {
+  category?: string;
+  region?: string;
+  tags: string[];
+}
+
 export type ViewMode = "grid" | "list" | "stats";
 
 export interface StatusCounts { total: number; read: number; reading: number; want: number; unset: number; }

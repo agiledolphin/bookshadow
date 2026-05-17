@@ -7,6 +7,9 @@ import { useToastStore } from "../stores/toastStore";
 interface AppConfig {
   google_books_api_key?: string;
   douban_cookie?: string;
+  anthropic_api_key?: string;
+  llm_base_url?: string;
+  llm_model?: string;
 }
 
 interface Props {
@@ -19,6 +22,7 @@ export function SettingsModal({ onClose }: Props) {
   const [saved, setSaved] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [showCookie, setShowCookie] = useState(false);
+  const [showAnthropicKey, setShowAnthropicKey] = useState(false);
   const [loggingIn, setLoggingIn] = useState(false);
   const { addToast } = useToastStore();
 
@@ -179,6 +183,51 @@ export function SettingsModal({ onClose }: Props) {
               {loggingIn ? "等待登录中…" : "打开豆瓣登录窗口（自动提取）"}
             </button>
           </div>
+          <div className="border-t border-gray-100 pt-5 flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-gray-700">Anthropic API Key</label>
+            <div className="relative">
+              <input
+                type={showAnthropicKey ? "text" : "password"}
+                value={config.anthropic_api_key ?? ""}
+                onChange={(e) => setConfig({ ...config, anthropic_api_key: e.target.value || undefined })}
+                placeholder="sk-ant-..."
+                className="w-full px-3 py-2 pr-9 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => setShowAnthropicKey((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+                title={showAnthropicKey ? "隐藏" : "显示"}
+              >
+                {showAnthropicKey ? (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                )}
+              </button>
+            </div>
+            <p className="text-xs text-gray-400">用于书籍推荐与元数据补全（AI 建议）。可在 Anthropic Console 申请。</p>
+            <input
+              type="text"
+              value={config.llm_base_url ?? ""}
+              onChange={(e) => setConfig({ ...config, llm_base_url: e.target.value || undefined })}
+              placeholder="自定义 API 地址（留空使用官方）"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 font-mono"
+            />
+            <input
+              type="text"
+              value={config.llm_model ?? ""}
+              onChange={(e) => setConfig({ ...config, llm_model: e.target.value || undefined })}
+              placeholder="模型名称（留空用 claude-sonnet-4-6）"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 font-mono"
+            />
+          </div>
+
           <div className="border-t border-gray-100 pt-5 flex flex-col gap-1.5">
             <label className="text-sm font-medium text-gray-700">数据导出</label>
             <div className="flex gap-2">

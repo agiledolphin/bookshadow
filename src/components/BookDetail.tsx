@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { Book, BookMeta, CreateBook } from "../types/book";
+import type { Book, BookMeta, CreateBook, MetadataSuggestion } from "../types/book";
 import { STATUSES, LANGUAGES, REGIONS, CATEGORIES } from "../types/book";
 import { useBookStore } from "../stores/bookStore";
 import { useToastStore } from "../stores/toastStore";
@@ -10,6 +10,7 @@ import { TagInput, parseTags } from "./TagInput";
 import { ReviewEditor } from "./ReviewEditor";
 import { SearchableSelect } from "./SearchableSelect";
 import { DateInput } from "./DateInput";
+import { AiSuggestionPanel } from "./AiSuggestionPanel";
 
 function localCoverSrc(path: string, v = 0): string {
   const filename = path.split("/").pop() ?? "";
@@ -36,6 +37,8 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
   const [fetchError, setFetchError] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
+  const [suggestingMeta, setSuggestingMeta] = useState(false);
+  const [suggestion, setSuggestion] = useState<MetadataSuggestion | null>(null);
 
   const { updateBook, patchBook } = useBookStore();
   const coverLocal = useBookStore(
@@ -73,6 +76,7 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
     setForm(makeForm(book));
     setIsbnInput(book.isbn ?? "");
     setFetchError("");
+    setSuggestion(null);
     setEditMode(true);
   };
 
@@ -168,6 +172,40 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
       setSaving(false);
     }
   };
+
+  const handleSuggest = async () => {
+    setSuggestingMeta(true);
+    setSuggestion(null);
+    try {
+      const s = await invoke<MetadataSuggestion>("suggest_metadata", {
+        title: form.title,
+        author: form.author ?? "",
+        description: form.description ?? "",
+      });
+      const validated = {
+        ...s,
+        category: CATEGORIES.includes(s.category as typeof CATEGORIES[number]) ? s.category : undefined,
+        region: REGIONS.includes(s.region as typeof REGIONS[number]) ? s.region : undefined,
+      };
+      if (!validated.category && !validated.region && validated.tags.length === 0) {
+        addToast("AI 未能给出建议");
+      } else {
+        setSuggestion(validated);
+      }
+    } catch (e) {
+      addToast(String(e));
+    } finally {
+      setSuggestingMeta(false);
+    }
+  };
+
+  const adoptCategory = (v: string) => setForm(f => ({ ...f, category: v }));
+  const adoptRegion = (v: string) => setForm(f => ({ ...f, region: v }));
+  const adoptTag = (tag: string) => setForm(f => {
+    const existing = parseTags(f.tags ?? "[]");
+    if (existing.includes(tag)) return f;
+    return { ...f, tags: JSON.stringify([...existing, tag]) };
+  });
 
   const statusLabel = STATUSES.find(s => s.value === book.status)?.label;
 
@@ -378,6 +416,32 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
                     />
                   </FormField>
                 </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSuggest}
+                    disabled={suggestingMeta}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs text-purple-600 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    {suggestingMeta ? "AI 分析中…" : "AI 建议类别/地域/标签"}
+                  </button>
+                </div>
+                {suggestion && (
+                  <AiSuggestionPanel
+                    suggestion={suggestion}
+                    currentCategory={form.category ?? ""}
+                    currentRegion={form.region ?? ""}
+                    currentTags={parseTags(form.tags ?? "[]")}
+                    onAdoptCategory={adoptCategory}
+                    onAdoptRegion={adoptRegion}
+                    onAdoptTag={adoptTag}
+                    onDismiss={() => setSuggestion(null)}
+                  />
+                )}
 
                 <div className="grid grid-cols-3 gap-3">
                   <FormField label="阅读状态">

@@ -16,10 +16,35 @@ interface Props {
 export function BookCard({ book, onClick, onDelete }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const nonce = useBookStore((s) => s.coverNonce[book.id]);
+  const recommendation = useBookStore((s) => s.recommendations?.[book.id]);
 
-  useEffect(() => { setImgLoaded(false); }, [book.cover_local, nonce]);
+  useEffect(() => {
+    if (!book.cover_local) {
+      setImgLoaded(false);
+      setImgError(false);
+      return;
+    }
+    const img = imgRef.current;
+    // Cached image: browser loads synchronously before React attaches onLoad → check immediately
+    if (img?.complete) {
+      if (img.naturalWidth > 0) { setImgLoaded(true); setImgError(false); }
+      else { setImgLoaded(false); setImgError(true); }
+      return;
+    }
+    setImgLoaded(false);
+    setImgError(false);
+    // Fallback for async loads where onLoad/onError don't fire (WebKit custom protocol quirk)
+    const t = setTimeout(() => {
+      const img = imgRef.current;
+      if (!img || img.naturalWidth === 0) setImgError(true);
+      else setImgLoaded(true);
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [book.cover_local, nonce]);
 
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -39,18 +64,19 @@ export function BookCard({ book, onClick, onDelete }: Props) {
       className="group bg-white rounded-xl border border-gray-200 overflow-hidden cursor-pointer hover:shadow-md hover:border-blue-300 transition-all flex flex-col"
     >
       <div className="aspect-[2/3] bg-gray-100 overflow-hidden relative">
-        {book.cover_local ? (
+        {book.cover_local && !imgError ? (
           <>
             {!imgLoaded && (
               <div className="absolute inset-0 bg-gray-200 animate-pulse" />
             )}
             <img
+              ref={imgRef}
               key={`${book.cover_local}-${nonce}`}
               src={localCoverSrc(book.cover_local, nonce)}
               alt={book.title}
               className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${imgLoaded ? "opacity-100" : "opacity-0"}`}
-              loading="lazy"
               onLoad={() => setImgLoaded(true)}
+              onError={() => setImgError(true)}
             />
           </>
         ) : (
@@ -65,7 +91,12 @@ export function BookCard({ book, onClick, onDelete }: Props) {
             {"★".repeat(book.rating)}
           </div>
         )}
-        {book.status && (
+        {recommendation && (
+          <div className="absolute top-1.5 left-1.5 bg-purple-600/85 text-white text-xs px-1.5 py-0.5 rounded-full">
+            ✦ {recommendation.score.toFixed(1)}
+          </div>
+        )}
+        {book.status && !recommendation && (
           <div className={`absolute bottom-1.5 left-1.5 w-2.5 h-2.5 rounded-full ring-1 ring-white/60 ${
             book.status === "want" ? "bg-yellow-400" :
             book.status === "reading" ? "bg-blue-400" : "bg-green-400"
@@ -73,6 +104,11 @@ export function BookCard({ book, onClick, onDelete }: Props) {
             book.status === "want" ? "想读" :
             book.status === "reading" ? "在读" : "已读"
           } />
+        )}
+        {recommendation && (
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/75 to-transparent px-2 pt-4 pb-1.5">
+            <p className="text-white text-[10px] leading-tight line-clamp-2">{recommendation.reason}</p>
+          </div>
         )}
       </div>
       <div className="p-3 flex flex-col flex-1">

@@ -40,6 +40,7 @@ bookshadow/
 │   │   ├── ReviewEditor.tsx      # Markdown 书评编辑器
 │   │   ├── FilterPanel.tsx       # 筛选面板
 │   │   ├── SettingsModal.tsx     # 设置
+│   │   ├── AiSuggestionPanel.tsx # AI 元数据建议面板（逐项确认）
 │   │   └── Toast.tsx             # 消息通知
 │   ├── stores/
 │   │   ├── bookStore.ts          # 书籍状态
@@ -63,8 +64,11 @@ bookshadow/
 │   │   │   ├── review.rs         # 书评 CRUD
 │   │   │   ├── search.rs         # FTS5 全文搜索
 │   │   │   ├── settings.rs       # 配置读写
-│   │   │   └── batch_import.rs   # 条码扫描 + 缩略图
-│   │   └── config.rs             # AppConfig（google_books_api_key, douban_cookie）
+│   │   │   ├── batch_import.rs   # 条码扫描 + 缩略图
+│   │   │   └── llm.rs            # AI 推荐 + 元数据建议
+│   │   ├── llm/
+│   │   │   └── mod.rs            # call_claude + JSON 提取工具函数
+│   │   └── config.rs             # AppConfig（含 anthropic_api_key / llm_base_url / llm_model）
 │   └── tauri.conf.json
 └── BookShadow_PLAN.md
 ```
@@ -164,6 +168,13 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 |---------|------|
 | `get_config` | 读取 config.json |
 | `save_config` | 写入 config.json |
+
+### LLM / AI
+
+| Command | 参数 | 返回 | 说明 |
+|---------|------|------|------|
+| `recommend_books` | — | `Vec<BookRecommendation>` | 基于高分藏书偏好对「想读」书单排序，含评分（0.1 精度）与推荐理由 |
+| `suggest_metadata` | `title, author, description` | `MetadataSuggestion` | 推断书籍类别/地域/标签，结果在前端校验后展示供逐项确认 |
 
 ---
 
@@ -349,9 +360,23 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 - [x] 新增类别：军事、宗教；新增地域：巴基斯坦、白俄罗斯；`nationality_to_region` 同步扩充
 - [x] 豆瓣登录窗口（macOS）：设置页新增「打开豆瓣登录窗口（自动提取）」按钮；在 WebView 内完成登录后，通过 macOS 原生 `WKHTTPCookieStore.getAllCookies`（`objc2-web-kit` 绑定）从 WKWebView 内部读取 `douban.com` Cookie，自动写入 `config.json` 并关闭窗口；绕过 CSP 对 `fetch` 的限制，无需用户手动从 DevTools 复制 Cookie
 
-**后续规划**
+### Phase 18：LLM 集成 ✅（v0.8.0）
 
-- Phase 18：书籍推荐（基于高分标签/类别对「想读」列表排序；可选 LLM 集成）
+**目标**：基于用户藏书偏好的「想读」列表 AI 推荐排序，以及书籍元数据（类别/地域/标签）AI 辅助补全。
+
+**实施要点**
+
+- [x] `AppConfig` 新增 `anthropic_api_key`、`llm_base_url`（兼容 OpenAI 格式，默认官方 Anthropic 端点）、`llm_model`（默认 `claude-sonnet-4-6`）
+- [x] `llm/mod.rs`：`call_claude(prompt, cfg)` 发送 Messages API 请求（`x-api-key` + `anthropic-version: 2023-06-01`）；`extract_json_array` / `extract_json_object` 从 LLM 输出中剥离 Markdown 代码块
+- [x] `commands/llm.rs`：
+  - `recommend_books` — 查询高分藏书（4-5 星，最多 50 本）完整列表 + 类别/地域/标签分布统计，构建 prompt，调用 LLM，返回带评分（0.1 精度）和推荐理由的 `Vec<BookRecommendation>`，按评分降序排列
+  - `suggest_metadata` — 根据书名/作者/简介在固定 CATEGORIES / REGIONS 范围内推断类别/地域/标签，返回 `MetadataSuggestion`
+- [x] 前端 store：`recommendations: Record<number, BookRecommendation> | null`；`want` 筛选切走时自动清除推荐状态
+- [x] 工具栏：想读视图下显示「AI 推荐」按钮（紫色激活态），点击切换推荐排序
+- [x] BookCard：推荐分数徽标（`✦ 9.2`，紫色 pill）显示在封面左上角；推荐理由作为封面渐变遮罩叠层（`bg-gradient-to-t from-black/75`）显示在封面下沿
+- [x] 设置页：Anthropic API Key（密码输入 + 显示切换）、自定义 API 地址（兼容 DeepSeek / Ollama 等 OpenAI 格式端点）、模型名称
+- [x] `AiSuggestionPanel` 组件：点击「AI 建议」后在按钮下方展开建议行，类别/地域各有独立「采用」按钮，标签逐个 `+` 点击添加，已采用项显示绿色 ✓，`×` 可关闭；返回值在前端用 CATEGORIES / REGIONS 字典校验过滤，非法值不展示
+- [x] WebKit 封面缓存竞态修复：`useEffect` 首次运行时检查 `img.complete` + `naturalWidth`，已从缓存同步加载的图片直接设 `imgLoaded=true`，避免 `onLoad` 事件错过导致封面灰屏
 
 ---
 
@@ -383,6 +408,6 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 
 ## 八、后续可扩展方向
 
-- 书籍推荐（基于高分标签/类别排序「想读」列表；可选 LLM 集成）→ Phase 18
 - iCloud / 本地 NAS 同步
 - 借阅记录
+- AI 外延发现：基于偏好向外检索推荐书目（超出现有「想读」范围）

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import type { Book, BookFilters, FilterCounts, CreateBook, UpdateBook, Review, CreateReview, ViewMode, ReadingStats } from "../types/book";
+import type { Book, BookFilters, FilterCounts, CreateBook, UpdateBook, Review, CreateReview, ViewMode, ReadingStats, BookRecommendation } from "../types/book";
 
 const PAGE_SIZE = 40;
 
@@ -17,6 +17,8 @@ interface BookStore {
   error: string | null;
   coverNonce: Record<number, number>;
   stats: ReadingStats | null;
+  recommendations: Record<number, BookRecommendation> | null;
+  recommendationsLoading: boolean;
 
   // actions
   fetchBooks: (reset?: boolean) => Promise<void>;
@@ -32,6 +34,8 @@ interface BookStore {
   setSortBy: (sortBy: string) => void;
   setViewMode: (mode: ViewMode) => void;
   fetchStats: () => Promise<void>;
+  fetchRecommendations: () => Promise<void>;
+  clearRecommendations: () => void;
 
   fetchReviews: (bookId: number) => Promise<void>;
   createReview: (payload: CreateReview) => Promise<Review>;
@@ -48,6 +52,8 @@ export const useBookStore = create<BookStore>((set, get) => ({
   filters: {},
   filterCounts: null,
   stats: null,
+  recommendations: null,
+  recommendationsLoading: false,
   viewMode: "grid",
   loading: false,
   isLoadingMore: false,
@@ -188,6 +194,21 @@ export const useBookStore = create<BookStore>((set, get) => ({
       console.warn("fetchStats failed:", e);
     }
   },
+
+  fetchRecommendations: async () => {
+    set({ recommendationsLoading: true });
+    try {
+      const recs = await invoke<BookRecommendation[]>("recommend_books");
+      const map: Record<number, BookRecommendation> = {};
+      for (const r of recs) map[r.id] = r;
+      set({ recommendations: map, recommendationsLoading: false });
+    } catch (e) {
+      set({ recommendationsLoading: false });
+      throw e;
+    }
+  },
+
+  clearRecommendations: () => set({ recommendations: null }),
 
   fetchReviews: async (bookId) => {
     const reviews = await invoke<Review[]>("get_reviews", { bookId });

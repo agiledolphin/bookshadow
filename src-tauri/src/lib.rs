@@ -2,6 +2,7 @@ mod db;
 mod commands;
 mod isbn;
 mod config;
+mod llm;
 
 use db::DbState;
 use std::sync::Mutex;
@@ -136,6 +137,8 @@ pub fn run() {
             commands::settings::save_config,
             commands::settings::open_douban_login,
             commands::stats::get_stats,
+            commands::llm::recommend_books,
+            commands::llm::suggest_metadata,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -6,6 +6,9 @@ use std::path::PathBuf;
 pub struct AppConfig {
     pub google_books_api_key: Option<String>,
     pub douban_cookie: Option<String>,
+    pub anthropic_api_key: Option<String>,
+    pub llm_base_url: Option<String>,
+    pub llm_model: Option<String>,
 }
 
 fn config_path() -> PathBuf {
