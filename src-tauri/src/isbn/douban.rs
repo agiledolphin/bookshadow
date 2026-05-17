@@ -72,10 +72,6 @@ pub async fn fetch(isbn_or_url: &str, cookie: Option<&str>) -> Result<BookMeta> 
         .map(|e| e.text().collect::<String>().trim().to_string())
         .filter(|s| !s.is_empty());
 
-    if title.is_none() {
-        return Ok(BookMeta::default());
-    }
-
     // 封面
     let cover_sel = Selector::parse(SEL_COVER).unwrap();
     let cover_url = doc

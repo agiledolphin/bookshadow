@@ -91,8 +91,9 @@ pub fn normalize_date(s: &str) -> Option<String> {
 }
 
 pub async fn fetch_by_isbn(isbn: &str, source: Option<&str>, google_api_key: Option<&str>, douban_cookie: Option<&str>) -> Result<BookMeta> {
+    let has_data = |meta: &BookMeta| meta.title.is_some() || meta.publisher.is_some() || meta.isbn.is_some();
     let fetch_single = |meta: BookMeta, name: &str| -> Result<BookMeta> {
-        if meta.title.is_some() { Ok(meta) } else { Err(anyhow!("{} 未找到该书", name)) }
+        if has_data(&meta) { Ok(meta) } else { Err(anyhow!("{} 未找到该书", name)) }
     };
 
     match source {
@@ -101,7 +102,7 @@ pub async fn fetch_by_isbn(isbn: &str, source: Option<&str>, google_api_key: Opt
         Some("openlibrary") => fetch_single(open_library::fetch(isbn).await?, "Open Library"),
         _ => {
             match douban::fetch(isbn, douban_cookie).await {
-                Ok(meta) if meta.title.is_some() => return Ok(meta),
+                Ok(meta) if has_data(&meta) => return Ok(meta),
                 Err(e) if e.to_string().contains("Cookie 已失效") => return Err(e),
                 _ => {}
             }
