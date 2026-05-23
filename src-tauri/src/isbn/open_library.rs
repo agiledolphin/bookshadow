@@ -74,6 +74,78 @@ fn map_subject_to_category(subjects: &[NamedValue]) -> Option<String> {
     None
 }
 
+pub async fn search_by_title_author(title: &str, author: &str) -> Result<BookMeta> {
+    use url::form_urlencoded;
+    #[derive(serde::Deserialize)]
+    struct SearchResponse { docs: Vec<SearchDoc> }
+    #[derive(serde::Deserialize)]
+    struct SearchDoc {
+        title: Option<String>,
+        author_name: Option<Vec<String>>,
+        isbn: Option<Vec<String>>,
+        cover_i: Option<i64>,
+        publisher: Option<Vec<String>>,
+        first_publish_year: Option<i64>,
+        subject: Option<Vec<String>>,
+    }
+
+    let t_enc: String = form_urlencoded::byte_serialize(title.as_bytes()).collect();
+    let a_enc: String = form_urlencoded::byte_serialize(author.as_bytes()).collect();
+    let url = if author.is_empty() {
+        format!("https://openlibrary.org/search.json?title={}&limit=1", t_enc)
+    } else {
+        format!("https://openlibrary.org/search.json?title={}&author={}&limit=1", t_enc, a_enc)
+    };
+
+    let resp: SearchResponse = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?
+        .get(&url)
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    let Some(doc) = resp.docs.into_iter().next() else {
+        return Ok(BookMeta::default());
+    };
+
+    // If we have an ISBN, fetch full data for richer metadata
+    if let Some(isbn) = doc.isbn.as_ref().and_then(|v| v.first()) {
+        if let Ok(meta) = fetch(isbn).await {
+            if meta.title.is_some() {
+                return Ok(meta);
+            }
+        }
+    }
+
+    // Otherwise construct from search doc fields
+    let subjects: Vec<NamedValue> = doc
+        .subject
+        .unwrap_or_default()
+        .into_iter()
+        .map(|s| NamedValue { name: Some(s) })
+        .collect();
+
+    Ok(BookMeta {
+        title: doc.title,
+        author: doc.author_name.map(|a| a.join(", ")).filter(|s| !s.is_empty()),
+        cover_url: doc.cover_i.map(|id| {
+            format!("https://covers.openlibrary.org/b/id/{}-L.jpg", id)
+        }),
+        publisher: doc.publisher.and_then(|v| v.into_iter().next()),
+        pub_date: doc.first_publish_year.map(|y| y.to_string()),
+        category: map_subject_to_category(&subjects),
+        translator: None,
+        region: None,
+        isbn: None,
+        description: None,
+        language: None,
+        rating: None,
+        series: None,
+    })
+}
+
 pub async fn fetch(isbn: &str) -> Result<BookMeta> {
     let url = format!(
         "https://openlibrary.org/api/books?bibkeys=ISBN:{}&format=json&jscmd=data",

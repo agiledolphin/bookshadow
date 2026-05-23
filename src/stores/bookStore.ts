@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import type { Book, BookFilters, FilterCounts, CreateBook, UpdateBook, Review, CreateReview, ViewMode, ReadingStats, BookRecommendation } from "../types/book";
+import type { Book, BookFilters, FilterCounts, CreateBook, UpdateBook, Review, CreateReview, ViewMode, ReadingStats, BookRecommendation, DiscoveredBook } from "../types/book";
 
 const PAGE_SIZE = 40;
 
@@ -36,6 +36,8 @@ interface BookStore {
   fetchStats: () => Promise<void>;
   fetchRecommendations: () => Promise<void>;
   clearRecommendations: () => void;
+  discoverBooks: () => Promise<DiscoveredBook[]>;
+  enrichBook: (title: string, author: string) => Promise<DiscoveredBook>;
 
   fetchReviews: (bookId: number) => Promise<void>;
   createReview: (payload: CreateReview) => Promise<Review>;
@@ -209,6 +211,9 @@ export const useBookStore = create<BookStore>((set, get) => ({
   },
 
   clearRecommendations: () => set({ recommendations: null }),
+
+  discoverBooks: () => invoke<DiscoveredBook[]>("discover_books"),
+  enrichBook: (title, author) => invoke<DiscoveredBook>("enrich_book", { title, author }),
 
   fetchReviews: async (bookId) => {
     const reviews = await invoke<Review[]>("get_reviews", { bookId });

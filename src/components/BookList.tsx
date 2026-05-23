@@ -7,10 +7,11 @@ interface Props {
   isLoadingMore: boolean;
   onSelect: (book: Book) => void;
   onDelete: (book: Book) => void;
+  onMarkPurchased: (book: Book) => void;
   onLoadMore: () => void;
 }
 
-export function BookList({ books, hasMore, isLoadingMore, onSelect, onDelete, onLoadMore }: Props) {
+export function BookList({ books, hasMore, isLoadingMore, onSelect, onDelete, onMarkPurchased, onLoadMore }: Props) {
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -78,7 +79,16 @@ export function BookList({ books, hasMore, isLoadingMore, onSelect, onDelete, on
               <p className="text-xs text-gray-400">{book.category ?? ""}</p>
               <p className="text-xs text-gray-400">{book.region ?? ""}</p>
             </div>
-            <div className={`shrink-0 flex gap-1 transition-opacity ${confirming ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+            <div className={`shrink-0 flex items-center gap-1 transition-opacity ${confirming ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+              {book.status === "tobuy" && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onMarkPurchased(book); }}
+                  title="已购入，移入书库"
+                  className="px-2 py-0.5 rounded text-xs font-medium text-orange-600 hover:bg-orange-50 cursor-pointer"
+                >
+                  ✓ 已购入
+                </button>
+              )}
               <button
                 onClick={(e) => handleDeleteClick(e, book)}
                 title={confirming ? "再次点击确认删除" : "删除"}

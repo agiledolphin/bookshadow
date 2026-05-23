@@ -3,6 +3,7 @@ use anyhow::Result;
 use scraper::{Html, Selector};
 use std::collections::HashMap;
 use std::time::Duration;
+use url::form_urlencoded;
 
 const SEL_TITLE:  &str = "h1 span[property='v:itemreviewed'], h1 span";
 const SEL_COVER:  &str = "#mainpic img";
@@ -317,4 +318,57 @@ fn nationality_to_region(abbr: &str) -> Option<String> {
         _ => return None,
     };
     Some(region.to_string())
+}
+
+/// Search Douban by title using the internal JSON API (cat=1001 = books).
+/// The search result page is a JS SPA and cannot be scraped; this endpoint
+/// returns JSON containing HTML snippets from which we extract the subject URL.
+pub async fn search(title: &str, cookie: Option<&str>) -> Result<BookMeta> {
+    let encoded: String = form_urlencoded::byte_serialize(title.as_bytes()).collect();
+    let search_url = format!(
+        "https://www.douban.com/j/search?q={}&start=0&count=5&cat=1001",
+        encoded
+    );
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+        .timeout(Duration::from_secs(10))
+        .build()?;
+
+    let mut req = client
+        .get(&search_url)
+        .header("Accept", "application/json, */*")
+        .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+        .header("Referer", "https://book.douban.com/")
+        .header("X-Requested-With", "XMLHttpRequest");
+    if let Some(c) = cookie.filter(|s| !s.trim().is_empty()) {
+        req = req.header("Cookie", c.trim());
+    }
+    let resp = req.send().await?;
+    if !resp.status().is_success() {
+        return Ok(BookMeta::default());
+    }
+    let body = resp.text().await?;
+
+    // Extract first book.douban.com/subject/{id}/ URL from the JSON response body
+    // The JSON contains HTML snippets as strings; we scan for the pattern directly.
+    let subject_url = extract_subject_url_from_json(&body);
+
+    let Some(url) = subject_url else {
+        return Ok(BookMeta::default());
+    };
+
+    fetch(&url, cookie).await
+}
+
+/// Extract the first Douban subject ID from the /j/search JSON body.
+/// Results are wrapped in link2 redirects, but the onclick attributes contain
+/// `sid: NNNNNN` (unquoted integer) which is the most reliable extraction point.
+fn extract_subject_url_from_json(body: &str) -> Option<String> {
+    let sid_pos = body.find("sid: ")?;
+    let after = &body[sid_pos + 5..];
+    let id_end = after.find(|c: char| !c.is_ascii_digit())?;
+    let id = &after[..id_end];
+    if id.is_empty() { return None; }
+    Some(format!("https://book.douban.com/subject/{}/", id))
 }

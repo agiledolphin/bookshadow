@@ -83,11 +83,12 @@ export interface CreateBook {
 
 export type UpdateBook = Partial<CreateBook>;
 
-export type ReadStatus = "want" | "reading" | "read";
+export type ReadStatus = "want" | "reading" | "read" | "tobuy";
 export const STATUSES: { value: ReadStatus; label: string }[] = [
   { value: "want",    label: "想读" },
   { value: "reading", label: "在读" },
   { value: "read",    label: "已读" },
+  { value: "tobuy",   label: "待购" },
 ];
 
 export interface CreateReview {
@@ -118,6 +119,20 @@ export interface MetadataSuggestion {
   category?: string;
   region?: string;
   tags: string[];
+}
+
+export interface DiscoveredBook {
+  title: string;
+  author?: string;
+  reason: string;
+  cover_url?: string;
+  isbn?: string;
+  publisher?: string;
+  pub_date?: string;
+  language?: string;
+  category?: string;
+  region?: string;
+  description?: string;
 }
 
 export type ViewMode = "grid" | "list" | "stats";

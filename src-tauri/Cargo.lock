@@ -455,7 +455,7 @@ dependencies = [
 
 [[package]]
 name = "bookshadow"
-version = "0.8.0"
+version = "0.8.5"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -472,6 +472,7 @@ dependencies = [
  "scraper",
  "serde",
  "serde_json",
+ "strsim",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

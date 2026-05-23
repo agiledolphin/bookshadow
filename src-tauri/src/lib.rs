@@ -136,9 +136,12 @@ pub fn run() {
             commands::settings::get_config,
             commands::settings::save_config,
             commands::settings::open_douban_login,
+            commands::settings::test_douban_search,
             commands::stats::get_stats,
             commands::llm::recommend_books,
             commands::llm::suggest_metadata,
+            commands::llm::discover_books,
+            commands::llm::enrich_book,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

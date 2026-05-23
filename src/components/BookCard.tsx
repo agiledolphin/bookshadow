@@ -11,9 +11,10 @@ interface Props {
   book: Book;
   onClick: () => void;
   onDelete: () => void;
+  onMarkPurchased: () => void;
 }
 
-export function BookCard({ book, onClick, onDelete }: Props) {
+export function BookCard({ book, onClick, onDelete, onMarkPurchased }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -99,10 +100,12 @@ export function BookCard({ book, onClick, onDelete }: Props) {
         {book.status && !recommendation && (
           <div className={`absolute bottom-1.5 left-1.5 w-2.5 h-2.5 rounded-full ring-1 ring-white/60 ${
             book.status === "want" ? "bg-yellow-400" :
-            book.status === "reading" ? "bg-blue-400" : "bg-green-400"
+            book.status === "reading" ? "bg-blue-400" :
+            book.status === "tobuy" ? "bg-orange-400" : "bg-green-400"
           }`} title={
             book.status === "want" ? "想读" :
-            book.status === "reading" ? "在读" : "已读"
+            book.status === "reading" ? "在读" :
+            book.status === "tobuy" ? "待购" : "已读"
           } />
         )}
         {recommendation && (
@@ -126,6 +129,15 @@ export function BookCard({ book, onClick, onDelete }: Props) {
           )}
           {/* action icons — visible on hover */}
           <div className={`ml-auto shrink-0 flex gap-1 transition-opacity ${confirming ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+            {book.status === "tobuy" && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onMarkPurchased(); }}
+                title="已购入，移入书库"
+                className="px-1.5 py-0.5 rounded text-[10px] font-medium text-orange-600 hover:bg-orange-50 cursor-pointer"
+              >
+                ✓ 已购入
+              </button>
+            )}
             <button
               onClick={handleDeleteClick}
               title={confirming ? "再次点击确认删除" : "删除"}

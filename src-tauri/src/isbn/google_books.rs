@@ -134,21 +134,11 @@ fn map_category(cats: &[String]) -> Option<String> {
     if !cats.is_empty() { Some("其他".to_string()) } else { None }
 }
 
-pub async fn fetch(isbn: &str, api_key: Option<&str>) -> Result<BookMeta> {
-    let mut url = format!(
-        "https://www.googleapis.com/books/v1/volumes?q=isbn:{}",
-        isbn
-    );
-    if let Some(key) = api_key {
-        if !key.is_empty() {
-            url.push_str("&key=");
-            url.push_str(key);
-        }
-    }
+async fn fetch_url(url: &str) -> Result<BookMeta> {
     let http_resp = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()?
-        .get(&url)
+        .get(url)
         .send()
         .await?;
     let status = http_resp.status();
@@ -194,8 +184,45 @@ pub async fn fetch(isbn: &str, api_key: Option<&str>) -> Result<BookMeta> {
         description: vi.description,
         language,
         category,
-        isbn: isbn_val.or_else(|| Some(isbn.to_string())),
+        isbn: isbn_val,
         rating: None,
         series: None,
     })
+}
+
+pub async fn fetch(isbn: &str, api_key: Option<&str>) -> Result<BookMeta> {
+    let mut url = format!(
+        "https://www.googleapis.com/books/v1/volumes?q=isbn:{}&maxResults=1",
+        isbn
+    );
+    if let Some(key) = api_key.filter(|k| !k.is_empty()) {
+        url.push_str("&key=");
+        url.push_str(key);
+    }
+    let mut meta = fetch_url(&url).await?;
+    // Preserve ISBN passed in if API didn't return one
+    if meta.isbn.is_none() {
+        meta.isbn = Some(isbn.to_string());
+    }
+    Ok(meta)
+}
+
+pub async fn search_by_title_author(title: &str, author: &str, api_key: Option<&str>) -> Result<BookMeta> {
+    use url::form_urlencoded;
+    let q = if author.is_empty() {
+        form_urlencoded::byte_serialize(format!("intitle:{}", title).as_bytes()).collect::<String>()
+    } else {
+        form_urlencoded::byte_serialize(
+            format!("intitle:{} inauthor:{}", title, author).as_bytes()
+        ).collect::<String>()
+    };
+    let mut url = format!(
+        "https://www.googleapis.com/books/v1/volumes?q={}&maxResults=1",
+        q
+    );
+    if let Some(key) = api_key.filter(|k| !k.is_empty()) {
+        url.push_str("&key=");
+        url.push_str(key);
+    }
+    fetch_url(&url).await
 }

@@ -8,10 +8,11 @@ interface Props {
   isLoadingMore: boolean;
   onSelect: (book: Book) => void;
   onDelete: (book: Book) => void;
+  onMarkPurchased: (book: Book) => void;
   onLoadMore: () => void;
 }
 
-export function BookGrid({ books, hasMore, isLoadingMore, onSelect, onDelete, onLoadMore }: Props) {
+export function BookGrid({ books, hasMore, isLoadingMore, onSelect, onDelete, onMarkPurchased, onLoadMore }: Props) {
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -42,7 +43,7 @@ export function BookGrid({ books, hasMore, isLoadingMore, onSelect, onDelete, on
     <div className="flex-1 overflow-y-auto min-h-0">
       <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-4 p-4">
         {books.map((book) => (
-          <BookCard key={book.id} book={book} onClick={() => onSelect(book)} onDelete={() => onDelete(book)} />
+          <BookCard key={book.id} book={book} onClick={() => onSelect(book)} onDelete={() => onDelete(book)} onMarkPurchased={() => onMarkPurchased(book)} />
         ))}
       </div>
       <div ref={sentinelRef} className="h-px" />

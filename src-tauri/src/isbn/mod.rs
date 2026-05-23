@@ -90,6 +90,70 @@ pub fn normalize_date(s: &str) -> Option<String> {
     }
 }
 
+/// Search by title+author across sources; used for AI discovery enrichment.
+/// Always returns at least a BookMeta with the given title (never fails).
+pub async fn discover_search(
+    title: &str,
+    author: &str,
+    google_api_key: Option<&str>,
+    douban_cookie: Option<&str>,
+) -> BookMeta {
+    let has_cookie = douban_cookie.map_or(false, |c| !c.trim().is_empty());
+
+    // Try Douban first when cookie is available (best for Chinese books)
+    if has_cookie {
+        match douban::search(title, douban_cookie).await {
+            Ok(meta) if meta.title.is_some() || meta.publisher.is_some() => {
+                eprintln!("[enrich] {:?} → douban search ok (cover={} isbn={:?})",
+                    title, meta.cover_url.is_some(), meta.isbn);
+                return meta;
+            }
+            Ok(_) => eprintln!("[enrich] {:?} → douban search empty", title),
+            Err(e) => eprintln!("[enrich] {:?} → douban search err: {}", title, e),
+        }
+    }
+
+    // Try Google Books; if it returns an ISBN but no cover, attempt a Douban fetch by ISBN
+    match google_books::search_by_title_author(title, author, google_api_key).await {
+        Ok(mut meta) if meta.title.is_some() => {
+            if meta.cover_url.is_none() {
+                if let Some(isbn) = meta.isbn.clone() {
+                    if has_cookie {
+                        if let Ok(db) = douban::fetch(&isbn, douban_cookie).await {
+                            if db.cover_url.is_some() { meta.cover_url = db.cover_url; }
+                            if meta.author.is_none() { meta.author = db.author; }
+                            if meta.publisher.is_none() { meta.publisher = db.publisher; }
+                        }
+                    }
+                }
+            }
+            eprintln!("[enrich] {:?} → google ok (cover={} isbn={:?})",
+                title, meta.cover_url.is_some(), meta.isbn);
+            return meta;
+        }
+        Ok(_) => eprintln!("[enrich] {:?} → google empty", title),
+        Err(e) => eprintln!("[enrich] {:?} → google err: {}", title, e),
+    }
+
+    // Try Open Library
+    match open_library::search_by_title_author(title, author).await {
+        Ok(meta) if meta.title.is_some() => {
+            eprintln!("[enrich] {:?} → openlibrary ok (cover={} isbn={:?})",
+                title, meta.cover_url.is_some(), meta.isbn);
+            return meta;
+        }
+        Ok(_) => eprintln!("[enrich] {:?} → openlibrary empty", title),
+        Err(e) => eprintln!("[enrich] {:?} → openlibrary err: {}", title, e),
+    }
+
+    eprintln!("[enrich] {:?} → all sources failed, using LLM fallback", title);
+    BookMeta {
+        title: Some(title.to_string()),
+        author: if author.is_empty() { None } else { Some(author.to_string()) },
+        ..Default::default()
+    }
+}
+
 pub async fn fetch_by_isbn(isbn: &str, source: Option<&str>, google_api_key: Option<&str>, douban_cookie: Option<&str>) -> Result<BookMeta> {
     let has_data = |meta: &BookMeta| meta.title.is_some() || meta.publisher.is_some() || meta.isbn.is_some();
     let fetch_single = |meta: BookMeta, name: &str| -> Result<BookMeta> {

@@ -1,6 +1,49 @@
 use crate::config::{AppConfig, load, save};
 use tauri::{Emitter, Manager};
 
+/// Fetches the Douban book-search page for `title` and returns the HTTP status,
+/// final URL, and the first 3000 characters of HTML — useful for diagnosing
+/// why the CSS selector fails to find a subject link.
+#[tauri::command]
+pub async fn test_douban_search(title: String) -> Result<String, String> {
+    use url::form_urlencoded;
+    let cfg = load();
+    let cookie = cfg.douban_cookie.clone();
+
+    let encoded: String = form_urlencoded::byte_serialize(title.as_bytes()).collect();
+    let search_url = format!(
+        "https://www.douban.com/j/search?q={}&start=0&count=5&cat=1001",
+        encoded
+    );
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut req = client
+        .get(&search_url)
+        .header("Accept", "application/json, */*")
+        .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+        .header("Referer", "https://book.douban.com/")
+        .header("X-Requested-With", "XMLHttpRequest");
+    if let Some(ref c) = cookie {
+        if !c.trim().is_empty() {
+            req = req.header("Cookie", c.trim());
+        }
+    }
+
+    let resp = req.send().await.map_err(|e| e.to_string())?;
+    let status = resp.status().as_u16();
+    let final_url = resp.url().to_string();
+    let html = resp.text().await.map_err(|e| e.to_string())?;
+    let preview: String = html.chars().take(3000).collect();
+
+    Ok(format!("HTTP {status}\nFinal URL: {final_url}\nHas cookie: {}\n\n{preview}",
+        cookie.as_deref().map_or(false, |c| !c.trim().is_empty())))
+}
+
 #[tauri::command]
 pub fn get_config() -> AppConfig {
     load()
