@@ -372,3 +372,113 @@ fn extract_subject_url_from_json(body: &str) -> Option<String> {
     if id.is_empty() { return None; }
     Some(format!("https://book.douban.com/subject/{}/", id))
 }
+
+// ─── 新书速递 ──────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct NewBookEntry {
+    pub title: String,
+    pub author: Option<String>,
+    pub subject_id: String,
+    pub cover_url: Option<String>,
+    pub pub_date: Option<String>,
+}
+
+/// Fetch `pages` pages of book.douban.com/latest and return parsed entries.
+/// Requires a valid cookie; returns Err if cookie is absent or expired.
+pub async fn fetch_new_books(pages: u32, cookie: Option<&str>) -> Result<Vec<NewBookEntry>> {
+    let c = cookie.filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| anyhow::anyhow!("豆瓣新书速递需要配置 Cookie"))?;
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+        .timeout(Duration::from_secs(15))
+        .build()?;
+
+    let mut all_books = Vec::new();
+
+    for p in 1..=pages.max(1) {
+        let url = if p == 1 {
+            "https://book.douban.com/latest".to_string()
+        } else {
+            format!("https://book.douban.com/latest?p={}", p)
+        };
+
+        let resp = client
+            .get(&url)
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+            .header("Referer", "https://book.douban.com/")
+            .header("Cookie", c.trim())
+            .send()
+            .await?;
+
+        let final_url = resp.url().as_str().to_string();
+        if final_url.contains("accounts.douban.com") || final_url.contains("/login") {
+            return Err(anyhow::anyhow!("Cookie 已失效，请重新登录豆瓣"));
+        }
+
+        let html = resp.text().await?;
+        let page_books = parse_new_books_html(&html);
+        eprintln!("[new_books] page {} → {} books", p, page_books.len());
+        all_books.extend(page_books);
+
+        if p < pages {
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+        }
+    }
+
+    Ok(all_books)
+}
+
+fn parse_new_books_html(html: &str) -> Vec<NewBookEntry> {
+    let doc = Html::parse_document(html);
+    let item_sel  = Selector::parse("li.media.clearfix").unwrap();
+    let link_sel  = Selector::parse("div.media__img a").unwrap();
+    let title_sel = Selector::parse("div.media__body h2 a").unwrap();
+    let cover_sel = Selector::parse("img.subject-cover").unwrap();
+    let abs_sel   = Selector::parse("p.subject-abstract").unwrap();
+
+    let mut books = Vec::new();
+    for item in doc.select(&item_sel) {
+        let subject_id = item.select(&link_sel)
+            .next()
+            .and_then(|a| a.value().attr("href"))
+            .and_then(extract_subject_id_from_url);
+        let Some(subject_id) = subject_id else { continue };
+
+        let title: String = item.select(&title_sel)
+            .next()
+            .map(|a| a.text().collect::<String>().trim().to_string())
+            .unwrap_or_default();
+        if title.is_empty() { continue; }
+
+        let cover_url = item.select(&cover_sel)
+            .next()
+            .and_then(|img| img.value().attr("src"))
+            .map(|s| s.to_string());
+
+        // Abstract format: "[国籍] 作者 / 出版日期 / 出版社 / 价格 / 装帧"
+        let abstract_text: String = item.select(&abs_sel)
+            .next()
+            .map(|p| p.text().collect::<String>())
+            .unwrap_or_default();
+        let parts: Vec<&str> = abstract_text.trim().split(" / ").collect();
+        let author   = parts.first().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        let pub_date = parts.get(1).map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+
+        books.push(NewBookEntry { title, author, subject_id, cover_url, pub_date });
+    }
+    books
+}
+
+fn extract_subject_id_from_url(href: &str) -> Option<String> {
+    let start = href.find("subject/")?;
+    let after = &href[start + 8..];
+    let id = after.trim_end_matches('/').split('/').next().unwrap_or("");
+    if !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()) {
+        Some(id.to_string())
+    } else {
+        None
+    }
+}

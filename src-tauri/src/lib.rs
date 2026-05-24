@@ -137,6 +137,7 @@ pub fn run() {
             commands::settings::save_config,
             commands::settings::open_douban_login,
             commands::settings::test_douban_search,
+            commands::settings::test_douban_latest,
             commands::stats::get_stats,
             commands::llm::recommend_books,
             commands::llm::suggest_metadata,

@@ -50,7 +50,7 @@ pub async fn call_claude(prompt: &str, cfg: &AppConfig) -> Result<String> {
 
     let req = Request {
         model: model.to_string(),
-        max_tokens: 2048,
+        max_tokens: 8192,
         messages: vec![Message {
             role: "user".to_string(),
             content: prompt.to_string(),
@@ -67,19 +67,21 @@ pub async fn call_claude(prompt: &str, cfg: &AppConfig) -> Result<String> {
         .send()
         .await?;
 
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        return Err(anyhow!("API 错误 {}: {}", status, body));
+    let status = resp.status();
+    let raw = resp.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        return Err(anyhow!("API 错误 {}: {}", status, raw));
     }
 
-    let body: Response = resp.json().await?;
+    let body: Response = serde_json::from_str(&raw)
+        .map_err(|e| anyhow!("响应解析失败: {}", e))?;
     let text = body
         .content
         .into_iter()
         .find(|b| b.block_type == "text")
         .and_then(|b| b.text)
-        .ok_or_else(|| anyhow!("空响应"))?;
+        .ok_or_else(|| anyhow!("空响应（模型未返回文本，可能 max_tokens 不足）"))?;
 
     Ok(text)
 }

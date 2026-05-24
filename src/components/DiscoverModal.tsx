@@ -60,7 +60,7 @@ export function DiscoverModal({ onClose }: Props) {
     setAdding(prev => new Set(prev).add(idx));
     try {
       // Fetch metadata on demand when user clicks "加入待购"
-      const enriched = await enrichBook(book.title, book.author ?? "");
+      const enriched = await enrichBook(book.title, book.author ?? "", book.douban_subject_id);
       const payload: CreateBook = {
         title: enriched.title || book.title,
         author: enriched.author ?? book.author,

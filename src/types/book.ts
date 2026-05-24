@@ -133,6 +133,7 @@ export interface DiscoveredBook {
   category?: string;
   region?: string;
   description?: string;
+  douban_subject_id?: string;
 }
 
 export type ViewMode = "grid" | "list" | "stats";

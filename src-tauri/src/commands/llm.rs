@@ -237,6 +237,7 @@ pub struct DiscoveredBook {
     pub category: Option<String>,
     pub region: Option<String>,
     pub description: Option<String>,
+    pub douban_subject_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -419,10 +420,115 @@ pub async fn discover_books(
         rated_lines.join("\n")
     };
 
+    app.emit("discover_progress", "正在分析藏书偏好…").ok();
+
+    // ── Path A: Douban 新书速递 → LLM 筛选 ─────────────────────────────
+    app.emit("discover_progress", "正在获取豆瓣新书速递…").ok();
+    let new_books_result = isbn::douban::fetch_new_books(5, cfg.douban_cookie.as_deref()).await;
+
+    if let Ok(new_books) = new_books_result {
+        if !new_books.is_empty() {
+            eprintln!("[discover] douban new books: {} entries", new_books.len());
+
+            // Dedup against existing library
+            let candidates: Vec<&isbn::douban::NewBookEntry> = new_books.iter()
+                .filter(|b| {
+                    let cn = norm_title(&b.title);
+                    if existing_norm.contains(&cn) {
+                        let matched = existing_titles.iter()
+                            .find(|t| norm_title(t) == cn)
+                            .map(|t| t.as_str())
+                            .unwrap_or("?");
+                        eprintln!("[dedup] exact   「{}」← matched 「{}」(norm={})", b.title, matched, cn);
+                        return false;
+                    }
+                    if let Some(hit) = existing_norm_vec.iter()
+                        .find(|e| strsim::jaro_winkler(&cn, e) >= FUZZY_THRESHOLD)
+                    {
+                        eprintln!("[dedup] fuzzy   「{}」≈「{}」(score={:.2})",
+                            b.title, hit, strsim::jaro_winkler(&cn, hit));
+                        return false;
+                    }
+                    true
+                })
+                .collect();
+
+            eprintln!("[discover] after dedup: {} candidates", candidates.len());
+            app.emit("discover_progress", format!("去重后剩余 {} 本，AI 正在筛选…", candidates.len())).ok();
+
+            let book_list: String = candidates.iter().enumerate()
+                .map(|(i, b)| format!(
+                    "{}. 《{}》{}{}",
+                    i + 1,
+                    b.title,
+                    b.author.as_deref().unwrap_or(""),
+                    b.pub_date.as_ref().map(|d| format!("（{}）", d)).unwrap_or_default(),
+                ))
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            let prompt = format!(
+                "你是一位私人图书馆顾问。以下是近期豆瓣新书速递（共 {n} 本）：\n\n\
+                 {book_list}\n\n\
+                 **用户高分藏书（4-5星，共 {rated_n} 本）：**\n{rated}\n\n\
+                 **偏好统计：**\n类别：{cats}\n地域：{regions}\n常见标签：{tags}\n\n\
+                 请从以上新书列表中，选出最符合用户阅读偏好的书籍（最多 {target} 本）。\
+                 书名和作者必须与列表完全一致，给出不超过30字的推荐理由。\n\
+                 只返回JSON数组，不要其他文字：\n\
+                 [{{\"title\": \"书名\", \"author\": \"作者\", \"reason\": \"推荐理由\"}}]",
+                n = candidates.len(),
+                book_list = book_list,
+                rated_n = rated_lines.len(),
+                rated = rated_section,
+                cats = cats_str,
+                regions = regions_str,
+                tags = tags_str,
+                target = TARGET,
+            );
+
+            let response = call_claude(&prompt, &cfg).await.map_err(|e| e.to_string())?;
+            let json_str = extract_json_array(&response).to_string();
+            let selected: Vec<LlmDiscovery> =
+                serde_json::from_str(&json_str).unwrap_or_default();
+            eprintln!("[discover] LLM selected {} books", selected.len());
+
+            // Match LLM selections back to NewBookEntry to get subject_id
+            let out: Vec<DiscoveredBook> = selected.into_iter()
+                .take(TARGET)
+                .map(|sel| {
+                    let entry = candidates.iter()
+                        .find(|b| norm_title(&b.title) == norm_title(&sel.title));
+                    DiscoveredBook {
+                        title: sel.title,
+                        author: sel.author,
+                        reason: sel.reason,
+                        cover_url: entry.and_then(|b| b.cover_url.clone()),
+                        isbn: None,
+                        publisher: None,
+                        pub_date: entry.and_then(|b| b.pub_date.clone()),
+                        language: None,
+                        category: None,
+                        region: None,
+                        description: None,
+                        douban_subject_id: entry.map(|b| b.subject_id.clone()),
+                    }
+                })
+                .collect();
+
+            if !out.is_empty() {
+                return Ok(out);
+            }
+            eprintln!("[discover] LLM returned no selections, falling back to free generation");
+        }
+    } else {
+        eprintln!("[discover] douban new books failed: {:?}, falling back to LLM", new_books_result);
+    }
+
+    // ── Path B: 纯 LLM 自由生成（降级） ────────────────────────────────
+    app.emit("discover_progress", "AI 正在生成推荐书单…").ok();
+
     let mut results: Vec<LlmDiscovery> = Vec::new();
     let mut all_suggested: Vec<String> = Vec::new();
-
-    app.emit("discover_progress", "正在分析藏书偏好…").ok();
 
     for round in 0..MAX_ROUNDS {
         if results.len() >= TARGET { break; }
@@ -437,12 +543,9 @@ pub async fn discover_books(
             )
         };
 
-        let progress_msg = if round == 0 {
-            "AI 正在生成推荐书单…".to_string()
-        } else {
-            format!("推荐不足，AI 正在补充（第 {} 轮）…", round + 1)
-        };
-        app.emit("discover_progress", progress_msg).ok();
+        if round > 0 {
+            app.emit("discover_progress", format!("推荐不足，AI 正在补充（第 {} 轮）…", round + 1)).ok();
+        }
 
         let prompt = format!(
             "你是一位私人图书馆顾问。请基于用户的阅读偏好，推荐{n}本用户可能感兴趣的好书。\n\n\
@@ -509,6 +612,7 @@ pub async fn discover_books(
             category: None,
             region: None,
             description: None,
+            douban_subject_id: None,
         })
         .collect();
 
@@ -516,8 +620,37 @@ pub async fn discover_books(
 }
 
 #[tauri::command]
-pub async fn enrich_book(title: String, author: String) -> Result<DiscoveredBook, String> {
+pub async fn enrich_book(
+    title: String,
+    author: String,
+    douban_subject_id: Option<String>,
+) -> Result<DiscoveredBook, String> {
     let cfg = load();
+
+    // If we have a subject_id from the new-books scrape, fetch directly — faster and more accurate
+    if let Some(ref sid) = douban_subject_id {
+        let subject_url = format!("https://book.douban.com/subject/{}/", sid);
+        if let Ok(meta) = isbn::douban::fetch(&subject_url, cfg.douban_cookie.as_deref()).await {
+            if meta.title.is_some() || meta.publisher.is_some() {
+                eprintln!("[enrich] {} → douban subject direct ok", title);
+                return Ok(DiscoveredBook {
+                    title: meta.title.unwrap_or_else(|| title.clone()),
+                    author: meta.author.or_else(|| if author.is_empty() { None } else { Some(author) }),
+                    reason: String::new(),
+                    cover_url: meta.cover_url,
+                    isbn: meta.isbn,
+                    publisher: meta.publisher,
+                    pub_date: meta.pub_date,
+                    language: meta.language,
+                    category: meta.category,
+                    region: meta.region,
+                    description: meta.description,
+                    douban_subject_id: douban_subject_id.clone(),
+                });
+            }
+        }
+    }
+
     let meta = isbn::discover_search(
         &title,
         &author,
@@ -538,6 +671,7 @@ pub async fn enrich_book(title: String, author: String) -> Result<DiscoveredBook
         category: meta.category,
         region: meta.region,
         description: meta.description,
+        douban_subject_id,
     })
 }
 

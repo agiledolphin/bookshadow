@@ -1,4 +1,4 @@
-mod douban;
+pub mod douban;
 mod google_books;
 mod open_library;
 

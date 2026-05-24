@@ -37,7 +37,7 @@ interface BookStore {
   fetchRecommendations: () => Promise<void>;
   clearRecommendations: () => void;
   discoverBooks: () => Promise<DiscoveredBook[]>;
-  enrichBook: (title: string, author: string) => Promise<DiscoveredBook>;
+  enrichBook: (title: string, author: string, doubanSubjectId?: string) => Promise<DiscoveredBook>;
 
   fetchReviews: (bookId: number) => Promise<void>;
   createReview: (payload: CreateReview) => Promise<Review>;
@@ -213,7 +213,7 @@ export const useBookStore = create<BookStore>((set, get) => ({
   clearRecommendations: () => set({ recommendations: null }),
 
   discoverBooks: () => invoke<DiscoveredBook[]>("discover_books"),
-  enrichBook: (title, author) => invoke<DiscoveredBook>("enrich_book", { title, author }),
+  enrichBook: (title, author, doubanSubjectId) => invoke<DiscoveredBook>("enrich_book", { title, author, doubanSubjectId }),
 
   fetchReviews: async (bookId) => {
     const reviews = await invoke<Review[]>("get_reviews", { bookId });

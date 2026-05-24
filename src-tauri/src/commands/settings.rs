@@ -44,6 +44,58 @@ pub async fn test_douban_search(title: String) -> Result<String, String> {
         cookie.as_deref().map_or(false, |c| !c.trim().is_empty())))
 }
 
+/// Fetches book.douban.com/latest?p={page} and returns status, final URL,
+/// and first 5000 chars of HTML — used to inspect CSS selectors and pagination.
+#[tauri::command]
+pub async fn test_douban_latest(page: u32) -> Result<String, String> {
+    let cfg = load();
+    let cookie = cfg.douban_cookie.clone();
+
+    let url = if page <= 1 {
+        "https://book.douban.com/latest".to_string()
+    } else {
+        format!("https://book.douban.com/latest?p={}", page)
+    };
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut req = client
+        .get(&url)
+        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+        .header("Referer", "https://book.douban.com/");
+    if let Some(ref c) = cookie {
+        if !c.trim().is_empty() {
+            req = req.header("Cookie", c.trim());
+        }
+    }
+
+    let resp = req.send().await.map_err(|e| e.to_string())?;
+    let status = resp.status().as_u16();
+    let final_url = resp.url().to_string();
+    let html = resp.text().await.map_err(|e| e.to_string())?;
+    // Search for book subject links; return surrounding context if found
+    let body = if let Some(idx) = html.find("book.douban.com/subject") {
+        let start = html[..idx].rfind("<li").unwrap_or(idx.saturating_sub(200));
+        html[start..std::cmp::min(html.len(), start + 4000)].to_string()
+    } else {
+        // No subject links — return middle section to inspect page structure
+        let mid = html.len() / 2;
+        format!("[No subject links found]\n--- Middle section (offset {mid}) ---\n{}",
+            &html[mid..std::cmp::min(html.len(), mid + 4000)])
+    };
+
+    Ok(format!(
+        "HTTP {status}\nFinal URL: {final_url}\nHas cookie: {}\nTotal HTML length: {}\n\n{body}",
+        cookie.as_deref().map_or(false, |c| !c.trim().is_empty()),
+        html.len()
+    ))
+}
+
 #[tauri::command]
 pub fn get_config() -> AppConfig {
     load()

@@ -396,21 +396,18 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 - [x] **工具栏**：统计看板模式下隐藏排序选择、网格/列表切换、AI 推荐、AI 发现按钮
 - [x] **AI 推荐排序持久化**：移除「离开想读自动清除推荐」逻辑；ESC 清空筛选回全部视图，推荐排序状态保留，切回「想读」仍有效；手动点击「已推荐排序」可取消
 
-### Phase 20：LLM 推荐结合近期新书（计划中）
+### Phase 20：LLM 推荐结合近期新书 ✅（v0.8.6）
 
-**目标**：当前推荐全靠 LLM 自身知识，无法覆盖训练截止后的新书（2024-2025）。通过混合策略引入真实近期书目。
+**目标**：原推荐全靠 LLM 自身知识，无法覆盖训练截止后的新书。通过豆瓣新书速递 + LLM 筛选的混合��略，推荐真实近期书目。
 
-**方案**
+**实施要点**
 
-1. 用 Google Books API（`orderBy=newest`）按用户偏好分类搜索近期出版书目，得到候选列表
-2. 将候选列表 + 用户藏书偏好摘要一起发给 LLM，由 LLM 判断匹配度并筛选排序
-3. LLM 不需要"知道"新书，只做偏好匹配；新书来源由 API 保证真实性
-
-**关键点**
-
-- 新增"按分类拉近期书单"查询流程，与现有纯 LLM 路径并行或融合
-- 提示词改造为"从候选列表中筛选"模式，而非"自由生成"模式
-- 候选来源可扩展：豆瓣新书榜、Open Library recent 等
+- [x] `douban::fetch_new_books(pages, cookie)`：抓取 `book.douban.com/latest`（5 页 ≈ 100 本），解析 `li.media.clearfix` 书目条目，提取 subject_id / 书名 / 作者 / 封面 / 出版日期；页间延迟 1 秒防频率限制；需要 Cookie
+- [x] `discover_books` Path A（有 Cookie）：豆瓣新书 → 去重过滤（精确 + 模糊）→ LLM 从候选列表中筛选最多 5 本，提示词改为"从列表中选择"模式，LLM 不自由生成书名，消除幻觉风险
+- [x] `discover_books` Path B（降级）：无 Cookie 或豆瓣抓取失败时，自动回退到原有纯 LLM 自由生成路径
+- [x] `DiscoveredBook` 新增 `douban_subject_id` 字段；`enrich_book` 优先用 subject_id 直接 fetch 豆瓣详情页，比搜索更准确更快
+- [x] `max_tokens` 提升至 8192，适配 deepseek 等带 thinking 模式的模型（thinking 块消耗大量 token）
+- [x] 去重日志增强：exact 匹配时同时打印匹配到的藏书名和归一化字符串，便于诊断误判
 
 ---
 
