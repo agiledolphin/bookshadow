@@ -8,7 +8,7 @@ pub struct StatusCounts {
     pub read: i64,
     pub reading: i64,
     pub want: i64,
-    pub unset: i64,
+    pub tobuy: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -29,6 +29,7 @@ pub struct ReadingStats {
     pub yearly: Vec<YearCount>,
     pub by_category: Vec<LabelCount>,
     pub by_region: Vec<LabelCount>,
+    pub by_author: Vec<LabelCount>,
 }
 
 #[tauri::command]
@@ -47,8 +48,8 @@ pub fn get_stats(state: State<'_, DbState>) -> Result<ReadingStats, String> {
     let want = conn
         .query_row("SELECT COUNT(*) FROM books WHERE status = 'want'", [], |r| r.get::<_, i64>(0))
         .map_err(|e| e.to_string())?;
-    let unset = conn
-        .query_row("SELECT COUNT(*) FROM books WHERE status IS NULL", [], |r| r.get::<_, i64>(0))
+    let tobuy = conn
+        .query_row("SELECT COUNT(*) FROM books WHERE status = 'tobuy'", [], |r| r.get::<_, i64>(0))
         .map_err(|e| e.to_string())?;
 
     let yearly = {
@@ -82,10 +83,22 @@ pub fn get_stats(state: State<'_, DbState>) -> Result<ReadingStats, String> {
         rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
     };
 
+    let by_author = {
+        let sql = "SELECT author, COUNT(*) FROM books \
+                   WHERE author IS NOT NULL AND author != '' AND status != 'tobuy' \
+                   GROUP BY author ORDER BY COUNT(*) DESC LIMIT 20";
+        let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| Ok(LabelCount { label: row.get(0)?, count: row.get(1)? }))
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+    };
+
     Ok(ReadingStats {
-        status_counts: StatusCounts { total, read, reading, want, unset },
+        status_counts: StatusCounts { total, read, reading, want, tobuy },
         yearly,
         by_category,
         by_region,
+        by_author,
     })
 }

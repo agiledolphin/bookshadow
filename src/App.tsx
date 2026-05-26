@@ -57,7 +57,7 @@ export default function App() {
 
   const handleMarkPurchased = async (book: Book) => {
     try {
-      await updateBook(book.id, { status: "" });
+      await updateBook(book.id, { status: "want" });
       fetchBooks(true);
     } catch (err) {
       addToast(String(err));

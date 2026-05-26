@@ -160,12 +160,8 @@ pub fn get_books(
         else { conditions.push(format!("category = ?{}", param_values.len() + 1)); param_values.push(Box::new(v)); }
     }
     if let Some(v) = f.status {
-        if v.is_empty() {
-            conditions.push("status IS NULL".to_string());
-        } else {
-            conditions.push(format!("status = ?{}", param_values.len() + 1));
-            param_values.push(Box::new(v));
-        }
+        conditions.push(format!("status = ?{}", param_values.len() + 1));
+        param_values.push(Box::new(v));
     }
     if let Some(v) = f.tag     { conditions.push(format!("tags LIKE ?{}", param_values.len() + 1));   param_values.push(Box::new(format!("%\"{}\"%" , v))); }
     if let Some(ref v) = f.search_query {

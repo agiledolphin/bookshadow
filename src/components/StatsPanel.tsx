@@ -1,13 +1,13 @@
 import { useState } from "react";
 import type { ReadingStats } from "../types/book";
 
-type Tab = "trend" | "category" | "region";
+type Tab = "trend" | "category" | "region" | "author";
 
 const SLOT_W = 28;  // px per year on time axis
 const BAR_H = 220;
 
 export function StatsPanel({ stats }: { stats: ReadingStats }) {
-  const { status_counts, yearly, by_category, by_region } = stats;
+  const { status_counts, yearly, by_category, by_region, by_author } = stats;
   const [tab, setTab] = useState<Tab>("trend");
 
   const sortWithUnset = (arr: { label: string; count: number }[]) => [
@@ -20,6 +20,7 @@ export function StatsPanel({ stats }: { stats: ReadingStats }) {
   const yearlyData = yearly.map((y) => ({ year: y.year, value: y.count }));
   const categoryData = sortWithUnset(by_category.map((c) => ({ label: c.label, count: c.count })));
   const regionData   = sortWithUnset(by_region.map((r) => ({ label: r.label, count: r.count })));
+  const authorData   = by_author.map((a) => ({ label: a.label, count: a.count }));
 
   return (
     <div className="flex-1 overflow-y-auto bg-white">
@@ -29,13 +30,13 @@ export function StatsPanel({ stats }: { stats: ReadingStats }) {
           <KpiCard label="已读"   value={status_counts.read}    color="text-green-500" />
           <KpiCard label="在读"   value={status_counts.reading} color="text-blue-500" />
           <KpiCard label="想读"   value={status_counts.want}    color="text-amber-500" />
-          {status_counts.unset > 0 && (
-            <KpiCard label="未设" value={status_counts.unset} color="text-gray-300" />
+          {status_counts.tobuy > 0 && (
+            <KpiCard label="待购" value={status_counts.tobuy} color="text-orange-500" />
           )}
         </div>
 
         <div className="flex border-b border-gray-100">
-          {([["trend", "阅读趋势"], ["category", "类别分布"], ["region", "地域分布"]] as [Tab, string][]).map(([key, label]) => (
+          {([["trend", "阅读趋势"], ["category", "类别分布"], ["region", "地域分布"], ["author", "作者榜"]] as [Tab, string][]).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setTab(key)}
@@ -65,6 +66,11 @@ export function StatsPanel({ stats }: { stats: ReadingStats }) {
         {tab === "region" && (
           regionData.length > 0
             ? <HorizontalBarChart data={regionData} color="bg-teal-400" />
+            : <Empty text="暂无数据" />
+        )}
+        {tab === "author" && (
+          authorData.length > 0
+            ? <HorizontalBarChart data={authorData} color="bg-violet-400" labelWidth="w-24" />
             : <Empty text="暂无数据" />
         )}
       </div>
@@ -180,9 +186,11 @@ function TrendChart({
 function HorizontalBarChart({
   data,
   color = "bg-blue-400",
+  labelWidth = "w-16",
 }: {
   data: { label: string; count: number }[];
   color?: string;
+  labelWidth?: string;
 }) {
   const max = Math.max(...data.map((d) => d.count), 1);
   const total = data.reduce((s, d) => s + d.count, 0);
@@ -196,7 +204,7 @@ function HorizontalBarChart({
         return (
           <div key={d.label || "__unset__"} className="flex items-center gap-3">
             <span
-              className={`w-16 text-right shrink-0 truncate text-xs ${isUnset ? "text-gray-300" : "text-gray-500"}`}
+              className={`${labelWidth} text-right shrink-0 truncate text-xs ${isUnset ? "text-gray-300" : "text-gray-500"}`}
               title={d.label || "未设"}
             >
               {d.label || "未设"}

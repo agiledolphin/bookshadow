@@ -138,7 +138,7 @@ export interface DiscoveredBook {
 
 export type ViewMode = "grid" | "list" | "stats";
 
-export interface StatusCounts { total: number; read: number; reading: number; want: number; unset: number; }
+export interface StatusCounts { total: number; read: number; reading: number; want: number; tobuy: number; }
 export interface YearCount { year: number; count: number; }
 export interface LabelCount { label: string; count: number; }
 export interface ReadingStats {
@@ -146,6 +146,7 @@ export interface ReadingStats {
   yearly: YearCount[];
   by_category: LabelCount[];
   by_region: LabelCount[];
+  by_author: LabelCount[];
 }
 
 export const LANGUAGES = ["中文", "English", "日本語", "其他"] as const;

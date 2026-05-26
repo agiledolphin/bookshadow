@@ -42,5 +42,9 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         "#,
     )?;
 
+    conn.execute_batch(
+        "UPDATE books SET status = 'want' WHERE status IS NULL OR status = '';"
+    )?;
+
     Ok(())
 }

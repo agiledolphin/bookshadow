@@ -43,7 +43,7 @@ export function BookForm({ book, onClose }: Props) {
     cover_url: book?.cover_url ?? "",
     description: book?.description ?? "",
     translator: book?.translator ?? "",
-    status: book?.status,
+    status: book?.status ?? "want",
     started_at: book?.started_at,
     finished_at: book?.finished_at,
     series: book?.series ?? "",
@@ -130,26 +130,17 @@ export function BookForm({ book, onClose }: Props) {
 
   const handleStatusClick = (value: string) => {
     setForm((f) => {
-      const isActive = f.status === value;
-      const newStatus = isActive ? "" : value;
+      if (f.status === value) return f;
       const today = new Date().toISOString().split("T")[0];
-      if (isActive) {
-        return {
-          ...f,
-          status: newStatus,
-          started_at:  value === "reading" ? undefined : f.started_at,
-          finished_at: value === "read"    ? undefined : f.finished_at,
-        };
-      }
       switch (value) {
         case "want":
-          return { ...f, status: newStatus, started_at: undefined, finished_at: undefined };
+          return { ...f, status: value, started_at: undefined, finished_at: undefined };
         case "reading":
-          return { ...f, status: newStatus, started_at: f.started_at ?? today, finished_at: undefined };
+          return { ...f, status: value, started_at: f.started_at ?? today, finished_at: undefined };
         case "read":
-          return { ...f, status: newStatus, finished_at: f.finished_at ?? today };
+          return { ...f, status: value, finished_at: f.finished_at ?? today };
         default:
-          return { ...f, status: newStatus };
+          return { ...f, status: value };
       }
     });
   };
@@ -340,9 +331,10 @@ export function BookForm({ book, onClose }: Props) {
                     type="button"
                     onClick={() => handleStatusClick(value)}
                     className={`flex-1 cursor-pointer transition-colors ${
-                      form.status === value && (form.status as string) !== ""
-                        ? value === "want" ? "bg-yellow-100 text-yellow-700 font-medium"
+                      form.status === value
+                        ? value === "want"    ? "bg-yellow-100 text-yellow-700 font-medium"
                         : value === "reading" ? "bg-blue-100 text-blue-700 font-medium"
+                        : value === "tobuy"   ? "bg-orange-100 text-orange-700 font-medium"
                         : "bg-green-100 text-green-700 font-medium"
                         : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"
                     }`}
