@@ -195,10 +195,16 @@ function RowItem({
   );
 }
 
+type IsbnSource = "douban" | "goodreads" | "google" | "openlibrary" | "auto";
+const SOURCE_LABELS: Record<IsbnSource, string> = {
+  douban: "豆瓣", goodreads: "Goodreads", google: "Google Books", openlibrary: "Open Library", auto: "自动",
+};
+
 export function BatchImportModal({ onClose }: { onClose: () => void }) {
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [importing, setImporting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [source, setSource] = useState<IsbnSource>("douban");
   const isbnMapRef = useRef<Map<string, Book>>(new Map());
   const rowsRef = useRef<ImportRow[]>([]);
   const dragCounterRef = useRef(0);
@@ -222,7 +228,8 @@ export function BatchImportModal({ onClose }: { onClose: () => void }) {
   const fetchMetaForRow = useCallback(
     async (id: number, isbn: string) => {
       try {
-        const meta = await invoke<BookMeta>("fetch_by_isbn", { isbn, source: null });
+        const effectiveSource = source === "auto" ? null : source;
+        const meta = await invoke<BookMeta>("fetch_by_isbn", { isbn, source: effectiveSource });
         updateRow(id, {
           meta,
           phase: meta.title ? "ready" : "not_found",
@@ -232,7 +239,7 @@ export function BatchImportModal({ onClose }: { onClose: () => void }) {
         updateRow(id, { phase: "not_found", selected: false });
       }
     },
-    [updateRow]
+    [updateRow, source]
   );
 
   const scanRow = useCallback(
@@ -429,9 +436,25 @@ export function BatchImportModal({ onClose }: { onClose: () => void }) {
               {importedCount > 0 && ` · 已导入 ${importedCount} 本`}
             </span>
           )}
+          <div className="ml-auto flex items-center gap-3 mr-3">
+            {(Object.keys(SOURCE_LABELS) as IsbnSource[]).map(s => (
+              <label key={s} className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer select-none">
+                <input
+                  type="radio"
+                  name="batchSource"
+                  value={s}
+                  checked={source === s}
+                  onChange={() => setSource(s)}
+                  disabled={importing}
+                  className="accent-blue-500"
+                />
+                {SOURCE_LABELS[s]}
+              </label>
+            ))}
+          </div>
           <button
             onClick={() => { if (!importing) onClose(); }}
-            className="ml-auto p-1 text-gray-400 hover:text-gray-600 cursor-pointer"
+            className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

@@ -32,7 +32,7 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
   const [editMode, setEditMode] = useState(false);
   const [form, setForm] = useState<CreateBook>(makeForm(book));
   const [isbnInput, setIsbnInput] = useState(book.isbn ?? "");
-  const [isbnSource, setIsbnSource] = useState<"douban" | "google" | "openlibrary" | "auto">("douban");
+  const [isbnSource, setIsbnSource] = useState<"douban" | "goodreads" | "google" | "openlibrary" | "auto">("douban");
   const [fetching, setFetching] = useState(false);
   const [fetchError, setFetchError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -332,7 +332,7 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
                     <p className="text-xs text-blue-500 mt-1">检测到豆瓣链接，将直接抓取该页面</p>
                   ) : (
                     <div className="flex gap-3 mt-1.5">
-                      {(["douban", "google", "openlibrary", "auto"] as const).map(s => (
+                      {(["douban", "goodreads", "google", "openlibrary", "auto"] as const).map(s => (
                         <label key={s} className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer select-none">
                           <input
                             type="radio"
@@ -342,7 +342,7 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
                             onChange={() => setIsbnSource(s)}
                             className="accent-blue-500"
                           />
-                          {s === "auto" ? "自动" : s === "douban" ? "豆瓣" : s === "google" ? "Google Books" : "Open Library"}
+                          {s === "auto" ? "自动" : s === "douban" ? "豆瓣" : s === "goodreads" ? "Goodreads" : s === "google" ? "Google Books" : "Open Library"}
                         </label>
                       ))}
                     </div>

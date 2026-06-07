@@ -95,6 +95,47 @@ export function DiscoverModal({ onClose }: Props) {
     }
   };
 
+  const zhBooks = books.map((b, i) => ({ b, i })).filter(({ b }) => b.source === "douban");
+  const enBooks = books.map((b, i) => ({ b, i })).filter(({ b }) => b.source === "goodreads");
+  const otherBooks = books.map((b, i) => ({ b, i })).filter(({ b }) => b.source !== "douban" && b.source !== "goodreads");
+
+  const BookItem = ({ book, idx }: { book: DiscoveredBook; idx: number }) => {
+    const isAdded = added.has(idx);
+    const isAdding = adding.has(idx);
+    return (
+      <div className="flex gap-3 p-3 rounded-xl border border-gray-100 hover:border-gray-200 bg-gray-50">
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-sm text-gray-800 truncate">{book.title}</p>
+          {book.author && <p className="text-xs text-gray-500 truncate">{book.author}</p>}
+          <p className="text-xs text-purple-600 mt-1 line-clamp-2">{book.reason}</p>
+        </div>
+        <div className="flex items-center shrink-0">
+          {isAdded ? (
+            <span className="text-xs text-green-600 font-medium">✓ 已加入</span>
+          ) : (
+            <button
+              onClick={() => handleAdd(book, idx)}
+              disabled={isAdding}
+              className="px-3 py-1.5 text-xs bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 disabled:opacity-50 cursor-pointer disabled:cursor-default"
+            >
+              {isAdding ? "查询中…" : "加入待购"}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const Section = ({ label, items }: { label: string; items: { b: DiscoveredBook; i: number }[] }) => {
+    if (items.length === 0) return null;
+    return (
+      <div className="flex flex-col gap-2">
+        <p className="text-xs font-medium text-gray-400 px-1">{label}</p>
+        {items.map(({ b, i }) => <BookItem key={i} book={b} idx={i} />)}
+      </div>
+    );
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="bg-white rounded-2xl shadow-2xl w-[680px] max-h-[85vh] flex flex-col overflow-hidden">
@@ -135,9 +176,7 @@ export function DiscoverModal({ onClose }: Props) {
                     <div key={i} className={`flex items-center gap-2 text-sm ${
                       isActive ? "text-purple-600 font-medium" : "text-gray-400"
                     }`}>
-                      <span className="w-3 text-center text-xs shrink-0">
-                        {isActive ? "›" : "✓"}
-                      </span>
+                      <span className="w-3 text-center text-xs shrink-0">{isActive ? "›" : "✓"}</span>
                       <span>{msg}</span>
                     </div>
                   );
@@ -146,35 +185,10 @@ export function DiscoverModal({ onClose }: Props) {
             </div>
           )}
           {!loading && books.length > 0 && (
-            <div className="flex flex-col gap-3">
-              {books.map((book, i) => {
-                const isAdded = added.has(i);
-                const isAdding = adding.has(i);
-                return (
-                  <div key={i} className="flex gap-3 p-3 rounded-xl border border-gray-100 hover:border-gray-200 bg-gray-50">
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm text-gray-800 truncate">{book.title}</p>
-                      {book.author && <p className="text-xs text-gray-500 truncate">{book.author}</p>}
-                      <p className="text-xs text-purple-600 mt-1 line-clamp-2">{book.reason}</p>
-                    </div>
-                    {/* Action */}
-                    <div className="flex items-center shrink-0">
-                      {isAdded ? (
-                        <span className="text-xs text-green-600 font-medium">✓ 已加入</span>
-                      ) : (
-                        <button
-                          onClick={() => handleAdd(book, i)}
-                          disabled={isAdding}
-                          className="px-3 py-1.5 text-xs bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 disabled:opacity-50 cursor-pointer disabled:cursor-default"
-                        >
-                          {isAdding ? "查询中…" : "加入待购"}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="flex flex-col gap-5">
+              <Section label="中文新书 · 豆瓣新书速递" items={zhBooks} />
+              <Section label="英文新书 · Goodreads" items={enBooks} />
+              <Section label="AI 推荐" items={otherBooks} />
             </div>
           )}
         </div>
@@ -182,10 +196,7 @@ export function DiscoverModal({ onClose }: Props) {
         {/* Footer */}
         {!loading && books.length > 0 && (
           <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
-            <button
-              onClick={handleDiscover}
-              className="text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
-            >
+            <button onClick={handleDiscover} className="text-xs text-gray-400 hover:text-gray-600 cursor-pointer">
               重新生成
             </button>
             <div className="flex gap-2">

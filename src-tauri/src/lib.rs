@@ -138,6 +138,8 @@ pub fn run() {
             commands::settings::open_douban_login,
             commands::settings::test_douban_search,
             commands::settings::test_douban_latest,
+            commands::settings::test_goodreads,
+            commands::settings::test_goodreads_book,
             commands::stats::get_stats,
             commands::llm::recommend_books,
             commands::llm::suggest_metadata,

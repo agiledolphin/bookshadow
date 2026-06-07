@@ -213,3 +213,97 @@ pub fn open_douban_login(app: tauri::AppHandle) -> Result<(), String> {
 
     Ok(())
 }
+
+#[tauri::command]
+pub async fn test_goodreads(page: u32) -> Result<String, String> {
+    let url = if page <= 1 {
+        "https://www.goodreads.com/shelf/show/new-releases".to_string()
+    } else {
+        format!("https://www.goodreads.com/shelf/show/new-releases?page={}", page)
+    };
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .get(&url)
+        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        .header("Accept-Language", "en-US,en;q=0.9")
+        .header("Referer", "https://www.goodreads.com/")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let status = resp.status().as_u16();
+    let final_url = resp.url().to_string();
+    let html = resp.text().await.map_err(|e| e.to_string())?;
+
+    // Look for book entry patterns
+    let snippet = if let Some(idx) = html.find("bookTitle") {
+        let start = html[..idx].rfind('<').unwrap_or(idx.saturating_sub(500));
+        html[start..std::cmp::min(html.len(), start + 5000)].to_string()
+    } else if let Some(idx) = html.find("/book/show/") {
+        let start = idx.saturating_sub(300);
+        html[start..std::cmp::min(html.len(), start + 4000)].to_string()
+    } else {
+        let mid = html.len() / 2;
+        format!("[No book links found]\n--- Middle section ---\n{}",
+            &html[mid..std::cmp::min(html.len(), mid + 4000)])
+    };
+
+    Ok(format!(
+        "HTTP {status}\nFinal URL: {final_url}\nTotal HTML length: {}\n\n{snippet}",
+        html.len()
+    ))
+}
+
+#[tauri::command]
+pub async fn test_goodreads_book(isbn: String) -> Result<String, String> {
+    let url = format!("https://www.goodreads.com/book/isbn/{}", isbn.trim());
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .get(&url)
+        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        .header("Accept-Language", "en-US,en;q=0.9")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let status = resp.status().as_u16();
+    let final_url = resp.url().to_string();
+    let html = resp.text().await.map_err(|e| e.to_string())?;
+
+    // Extract JSON-LD block if present
+    let json_ld = if let Some(start) = html.find("application/ld+json") {
+        let after = &html[start..];
+        if let Some(open) = after.find('>') {
+            let content = &after[open + 1..];
+            if let Some(close) = content.find("</script>") {
+                content[..close.min(3000)].to_string()
+            } else { String::new() }
+        } else { String::new() }
+    } else { "[No JSON-LD found]".to_string() };
+
+    // Also grab a snippet near the title
+    let html_snippet = if let Some(idx) = html.find("bookTitle").or_else(|| html.find("BookPageTitle")).or_else(|| html.find("Text__title")) {
+        let start = idx.saturating_sub(200);
+        html[start..html.len().min(start + 2000)].to_string()
+    } else {
+        let mid = html.len() / 2;
+        format!("[No title found]\n{}", &html[mid..html.len().min(mid + 2000)])
+    };
+
+    Ok(format!(
+        "HTTP {status}\nFinal URL: {final_url}\nHTML length: {}\n\n--- JSON-LD ---\n{json_ld}\n\n--- HTML near title ---\n{html_snippet}",
+        html.len()
+    ))
+}

@@ -56,16 +56,18 @@ bookshadow/
 │   │   │   └── schema.rs         # DDL + migration
 │   │   ├── isbn/
 │   │   │   ├── mod.rs            # fetch_by_isbn 级联
-│   │   │   ├── douban.rs         # 豆瓣 HTML 抓取（支持 ISBN 和 subject URL）
+│   │   │   ├── douban.rs         # 豆瓣 HTML 抓取（支持 ISBN 和 subject URL）+ fetch_new_books
+│   │   │   ├── goodreads.rs      # Goodreads fetch_book（JSON-LD）+ fetch_new_books（shelf）
 │   │   │   ├── google_books.rs   # Google Books API
 │   │   │   └── open_library.rs   # Open Library API
 │   │   ├── commands/
 │   │   │   ├── book.rs           # 书籍 CRUD
 │   │   │   ├── review.rs         # 书评 CRUD
 │   │   │   ├── search.rs         # FTS5 全文搜索
-│   │   │   ├── settings.rs       # 配置读写
+│   │   │   ├── settings.rs       # 配置读写 + 调试命令（test_goodreads*）
 │   │   │   ├── batch_import.rs   # 条码扫描 + 缩略图
-│   │   │   └── llm.rs            # AI 推荐 + 元数据建议
+│   │   │   ├── stats.rs          # 读书统计（get_stats）
+│   │   │   └── llm.rs            # AI 推荐 + 元数据建议 + 发现（discover_books / enrich_book）
 │   │   ├── llm/
 │   │   │   └── mod.rs            # call_claude + JSON 提取工具函数
 │   │   └── config.rs             # AppConfig（含 anthropic_api_key / llm_base_url / llm_model）
@@ -105,7 +107,10 @@ CREATE TABLE books (
     cover_local TEXT,           -- 本地缓存路径
     description TEXT,
     translator  TEXT,
-    status      TEXT,           -- 'want' | 'reading' | 'read'
+    status      TEXT,           -- 'want' | 'reading' | 'read' | 'tobuy'
+    started_at  TEXT,           -- YYYY-MM-DD
+    finished_at TEXT,           -- YYYY-MM-DD
+    series      TEXT,
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -183,10 +188,11 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 按优先级顺序依次尝试：
 
 1. **豆瓣读书** — 中文书优先，HTML 抓取；支持 ISBN 和 `book.douban.com/subject/` 直链两种输入；需配置 Cookie 以绕过反爬
-2. **Google Books API** — 外文书回退，支持配置 API Key
-3. **Open Library API** — 开放，无需 Key
+2. **Goodreads** — 英文书首选；访问 `/book/isbn/{isbn}`，从页面 JSON-LD 解析书名/作者/封面/ISBN/语言，自动提取系列信息（`Title (Series, #N)` 格式）
+3. **Google Books API** — 通用回退，支持配置 API Key
+4. **Open Library API** — 开放，无需 Key
 
-批量导入时，扫码（Phase 1）全部并行完成后，元数据抓取（Phase 2）按序执行，每条间隔 1.2 秒，避免触发频率限制。
+`fetch_by_isbn` 支持 `source` 参数指定单一来源，或 `null` 按优先级级联。批量导入时 header 来源选择器统一设定整批来源，默认豆瓣。
 
 ---
 
@@ -409,6 +415,20 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 - [x] `max_tokens` 提升至 8192，适配 deepseek 等带 thinking 模式的模型（thinking 块消耗大量 token）
 - [x] 去重日志增强：exact 匹配时同时打印匹配到的藏书名和归一化字符串，便于诊断误判
 
+### Phase 21：Goodreads 集成 + 状态合并 + 统计优化 ✅（v0.9.0）
+
+**目标**：引入 Goodreads 作为英文书数据源，统一 AI 发现的中英文双轨，同时简化阅读状态模型、丰富统计看板。
+
+**实施要点**
+
+- [x] **状态合并**：「未设」并入「想读」；DB 启动迁移 `UPDATE books SET status = 'want' WHERE status IS NULL OR status = ''`；状态按钮改为 radio 语义（无法取消选中），任意书籍始终有明确状态；「待购」购入后变「想读」；FilterPanel 移除「未设」筛选按钮
+- [x] **Goodreads 单本抓取**：`isbn/goodreads.rs::fetch_book(isbn)` — 访问 `goodreads.com/book/isbn/{isbn}`，从 `application/ld+json` 解析 `name`（书名）、`author[0].name`、`image`（封面）、`isbn`、`inLanguage`；自动拆分系列后缀 `(Series, #N)` 为独立 `series` 字段；`fetch_by_isbn` 新增 `"goodreads"` 分支
+- [x] **Goodreads 新书抓取**：`isbn/goodreads.rs::fetch_new_books(pages)` — 抓取 `goodreads.com/shelf/show/new-releases`（3 页 ≈ 60 本），CSS 选择器解析书目；页间延迟 1.5s
+- [x] **AI 发现双轨**：`discover_books` 并行 `tokio::join!` 拉取豆瓣 + Goodreads 新书；两路各独立去重、各调一次 LLM 筛选 5 本；`DiscoveredBook.source` 标记来源；`DiscoverModal` 分区展示「中文新书·豆瓣」和「英文新书·Goodreads」
+- [x] **去重优化**：阈值 0.85 → 0.90；`MIN_FUZZY_CHARS = 5`（短字符串跳过模糊匹配）；`fuzzy_key()` 比较前去除英文冠词（the / a / an）
+- [x] **来源选择器全覆盖**：BookForm、BookDetail 编辑模式、BatchImportModal header 均加入 Goodreads 选项；批量导入默认豆瓣，整批来源一次切换
+- [x] **统计看板**：新增「待购」KPI 卡片（橙色）；新增「作者榜」Tab，SQL `GROUP BY author` 取前 20，`HorizontalBarChart` 支持 `labelWidth` prop
+
 ---
 
 ## 七、关键设计决策
@@ -441,4 +461,5 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 
 - iCloud / 本地 NAS 同步
 - 借阅记录
-- LLM 推荐结合近期新书（Phase 20，见上）
+- 重复 ISBN 导入策略：目前静默覆盖，可改为提示用户选择（跳过 / 更新 / 保留两条）
+- Goodreads 区域来源扩展：目前仅抓英语新书书架，可按语言/地区切换不同 shelf

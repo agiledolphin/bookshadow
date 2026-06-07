@@ -1,4 +1,5 @@
 pub mod douban;
+pub mod goodreads;
 mod google_books;
 mod open_library;
 
@@ -162,6 +163,7 @@ pub async fn fetch_by_isbn(isbn: &str, source: Option<&str>, google_api_key: Opt
 
     match source {
         Some("douban") => fetch_single(douban::fetch(isbn, douban_cookie).await?, "豆瓣"),
+        Some("goodreads") => fetch_single(goodreads::fetch_book(isbn).await?, "Goodreads"),
         Some("google") => fetch_single(google_books::fetch(isbn, google_api_key).await?, "Google Books"),
         Some("openlibrary") => fetch_single(open_library::fetch(isbn).await?, "Open Library"),
         _ => {

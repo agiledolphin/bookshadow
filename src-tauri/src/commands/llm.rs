@@ -238,6 +238,7 @@ pub struct DiscoveredBook {
     pub region: Option<String>,
     pub description: Option<String>,
     pub douban_subject_id: Option<String>,
+    pub source: String,
 }
 
 #[derive(Deserialize)]
@@ -291,7 +292,19 @@ fn norm_title(s: &str) -> String {
         .join(" ")
 }
 
-const FUZZY_THRESHOLD: f64 = 0.85;
+const FUZZY_THRESHOLD: f64 = 0.90;
+const MIN_FUZZY_CHARS: usize = 5; // skip fuzzy if either string is shorter than this
+
+/// Strip leading English articles before Jaro-Winkler comparison to avoid
+/// "the great alone" ≈ "the women" false positives from the shared prefix.
+fn fuzzy_key(normed: &str) -> &str {
+    for prefix in ["the ", "a ", "an "] {
+        if normed.starts_with(prefix) {
+            return &normed[prefix.len()..];
+        }
+    }
+    normed
+}
 
 #[tauri::command]
 pub async fn discover_books(
@@ -422,40 +435,72 @@ pub async fn discover_books(
 
     app.emit("discover_progress", "正在分析藏书偏好…").ok();
 
-    // ── Path A: Douban 新书速递 → LLM 筛选 ─────────────────────────────
-    app.emit("discover_progress", "正在获取豆瓣新书速递…").ok();
-    let new_books_result = isbn::douban::fetch_new_books(5, cfg.douban_cookie.as_deref()).await;
+    // ── Path A: 豆瓣 + Goodreads 并行抓取，各自 LLM 筛选 ────────────────
+    app.emit("discover_progress", "正在获取新书列表（豆瓣 + Goodreads）…").ok();
 
-    if let Ok(new_books) = new_books_result {
-        if !new_books.is_empty() {
-            eprintln!("[discover] douban new books: {} entries", new_books.len());
+    let (douban_result, gr_result) = tokio::join!(
+        isbn::douban::fetch_new_books(5, cfg.douban_cookie.as_deref()),
+        isbn::goodreads::fetch_new_books(3),
+    );
 
-            // Dedup against existing library
-            let candidates: Vec<&isbn::douban::NewBookEntry> = new_books.iter()
-                .filter(|b| {
-                    let cn = norm_title(&b.title);
-                    if existing_norm.contains(&cn) {
-                        let matched = existing_titles.iter()
-                            .find(|t| norm_title(t) == cn)
-                            .map(|t| t.as_str())
-                            .unwrap_or("?");
-                        eprintln!("[dedup] exact   「{}」← matched 「{}」(norm={})", b.title, matched, cn);
-                        return false;
-                    }
-                    if let Some(hit) = existing_norm_vec.iter()
-                        .find(|e| strsim::jaro_winkler(&cn, e) >= FUZZY_THRESHOLD)
-                    {
-                        eprintln!("[dedup] fuzzy   「{}」≈「{}」(score={:.2})",
-                            b.title, hit, strsim::jaro_winkler(&cn, hit));
-                        return false;
-                    }
-                    true
-                })
-                .collect();
+    let douban_entries: Vec<isbn::douban::NewBookEntry> = douban_result.unwrap_or_else(|e| {
+        eprintln!("[discover] douban failed: {}", e); vec![]
+    });
+    let gr_entries: Vec<isbn::douban::NewBookEntry> = gr_result.unwrap_or_else(|e| {
+        eprintln!("[discover] goodreads failed: {}", e); vec![]
+    });
 
-            eprintln!("[discover] after dedup: {} candidates", candidates.len());
-            app.emit("discover_progress", format!("去重后剩余 {} 本，AI 正在筛选…", candidates.len())).ok();
+    let douban_candidates: Vec<&isbn::douban::NewBookEntry> = douban_entries.iter().filter(|b| {
+        let cn = norm_title(&b.title);
+        if existing_norm.contains(&cn) {
+            let matched = existing_titles.iter().find(|t| norm_title(t) == cn)
+                .map(|t| t.as_str()).unwrap_or("?");
+            eprintln!("[dedup] exact   「{}」← matched 「{}」", b.title, matched);
+            return false;
+        }
+        let fk = fuzzy_key(&cn);
+        if fk.chars().count() >= MIN_FUZZY_CHARS {
+            if let Some(hit) = existing_norm_vec.iter()
+                .find(|e| { let ek = fuzzy_key(e); ek.chars().count() >= MIN_FUZZY_CHARS && strsim::jaro_winkler(fk, ek) >= FUZZY_THRESHOLD })
+            {
+                eprintln!("[dedup] fuzzy   「{}」≈「{}」", b.title, hit);
+                return false;
+            }
+        }
+        true
+    }).collect();
 
+    let gr_candidates: Vec<&isbn::douban::NewBookEntry> = gr_entries.iter().filter(|b| {
+        let cn = norm_title(&b.title);
+        if existing_norm.contains(&cn) {
+            let matched = existing_titles.iter().find(|t| norm_title(t) == cn)
+                .map(|t| t.as_str()).unwrap_or("?");
+            eprintln!("[dedup] exact   「{}」← matched 「{}」", b.title, matched);
+            return false;
+        }
+        let fk = fuzzy_key(&cn);
+        if fk.chars().count() >= MIN_FUZZY_CHARS {
+            if let Some(hit) = existing_norm_vec.iter()
+                .find(|e| { let ek = fuzzy_key(e); ek.chars().count() >= MIN_FUZZY_CHARS && strsim::jaro_winkler(fk, ek) >= FUZZY_THRESHOLD })
+            {
+                eprintln!("[dedup] fuzzy   「{}」≈「{}」", b.title, hit);
+                return false;
+            }
+        }
+        true
+    }).collect();
+
+    eprintln!("[discover] douban {} candidates, goodreads {} candidates",
+        douban_candidates.len(), gr_candidates.len());
+
+    if !douban_candidates.is_empty() || !gr_candidates.is_empty() {
+        app.emit("discover_progress", format!(
+            "豆瓣 {} 本 + Goodreads {} 本，AI 正在筛选…",
+            douban_candidates.len(), gr_candidates.len()
+        )).ok();
+
+        // Build list-selection prompt for one source
+        let build_prompt = |candidates: &[&isbn::douban::NewBookEntry], source_label: &str| -> String {
             let book_list: String = candidates.iter().enumerate()
                 .map(|(i, b)| format!(
                     "{}. 《{}》{}{}",
@@ -466,9 +511,8 @@ pub async fn discover_books(
                 ))
                 .collect::<Vec<_>>()
                 .join("\n");
-
-            let prompt = format!(
-                "你是一位私人图书馆顾问。以下是近期豆瓣新书速递（共 {n} 本）：\n\n\
+            format!(
+                "你是一位私人图书馆顾问。以下是近期 {source} 新书（共 {n} 本）：\n\n\
                  {book_list}\n\n\
                  **用户高分藏书（4-5星，共 {rated_n} 本）：**\n{rated}\n\n\
                  **偏好统计：**\n类别：{cats}\n地域：{regions}\n常见标签：{tags}\n\n\
@@ -476,6 +520,7 @@ pub async fn discover_books(
                  书名和作者必须与列表完全一致，给出不超过30字的推荐理由。\n\
                  只返回JSON数组，不要其他文字：\n\
                  [{{\"title\": \"书名\", \"author\": \"作者\", \"reason\": \"推荐理由\"}}]",
+                source = source_label,
                 n = candidates.len(),
                 book_list = book_list,
                 rated_n = rated_lines.len(),
@@ -484,44 +529,73 @@ pub async fn discover_books(
                 regions = regions_str,
                 tags = tags_str,
                 target = TARGET,
-            );
+            )
+        };
 
-            let response = call_claude(&prompt, &cfg).await.map_err(|e| e.to_string())?;
-            let json_str = extract_json_array(&response).to_string();
-            let selected: Vec<LlmDiscovery> =
-                serde_json::from_str(&json_str).unwrap_or_default();
-            eprintln!("[discover] LLM selected {} books", selected.len());
+        let douban_prompt = if !douban_candidates.is_empty() {
+            Some(build_prompt(&douban_candidates, "豆瓣新书速递（中文）"))
+        } else { None };
+        let gr_prompt = if !gr_candidates.is_empty() {
+            Some(build_prompt(&gr_candidates, "Goodreads（英文）"))
+        } else { None };
 
-            // Match LLM selections back to NewBookEntry to get subject_id
-            let out: Vec<DiscoveredBook> = selected.into_iter()
-                .take(TARGET)
-                .map(|sel| {
-                    let entry = candidates.iter()
-                        .find(|b| norm_title(&b.title) == norm_title(&sel.title));
-                    DiscoveredBook {
-                        title: sel.title,
-                        author: sel.author,
-                        reason: sel.reason,
-                        cover_url: entry.and_then(|b| b.cover_url.clone()),
-                        isbn: None,
-                        publisher: None,
-                        pub_date: entry.and_then(|b| b.pub_date.clone()),
-                        language: None,
-                        category: None,
-                        region: None,
-                        description: None,
-                        douban_subject_id: entry.map(|b| b.subject_id.clone()),
-                    }
-                })
-                .collect();
+        // Run both LLM calls in parallel
+        let (douban_resp, gr_resp) = tokio::join!(
+            async {
+                let Some(prompt) = douban_prompt else { return vec![] };
+                call_claude(&prompt, &cfg).await.ok()
+                    .and_then(|r| serde_json::from_str::<Vec<LlmDiscovery>>(
+                        &extract_json_array(&r).to_string()).ok())
+                    .unwrap_or_default()
+            },
+            async {
+                let Some(prompt) = gr_prompt else { return vec![] };
+                call_claude(&prompt, &cfg).await.ok()
+                    .and_then(|r| serde_json::from_str::<Vec<LlmDiscovery>>(
+                        &extract_json_array(&r).to_string()).ok())
+                    .unwrap_or_default()
+            },
+        );
 
-            if !out.is_empty() {
-                return Ok(out);
-            }
-            eprintln!("[discover] LLM returned no selections, falling back to free generation");
+        eprintln!("[discover] douban LLM {} books, goodreads LLM {} books",
+            douban_resp.len(), gr_resp.len());
+
+        // Assemble with source labels
+        let assemble = |selected: Vec<LlmDiscovery>,
+                        candidates: &[&isbn::douban::NewBookEntry],
+                        douban_src: &[isbn::douban::NewBookEntry],
+                        source: &str| -> Vec<DiscoveredBook> {
+            selected.into_iter().take(TARGET).map(|sel| {
+                let sn = norm_title(&sel.title);
+                let entry = candidates.iter().copied().find(|b| norm_title(&b.title) == sn);
+                let douban_subject_id = douban_src.iter()
+                    .find(|b| norm_title(&b.title) == sn)
+                    .map(|b| b.subject_id.clone());
+                DiscoveredBook {
+                    title: sel.title,
+                    author: sel.author,
+                    reason: sel.reason,
+                    cover_url: entry.and_then(|b| b.cover_url.clone()),
+                    isbn: None,
+                    publisher: None,
+                    pub_date: entry.and_then(|b| b.pub_date.clone()),
+                    language: None,
+                    category: None,
+                    region: None,
+                    description: None,
+                    douban_subject_id,
+                    source: source.to_string(),
+                }
+            }).collect()
+        };
+
+        let mut out = assemble(douban_resp, &douban_candidates, &douban_entries, "douban");
+        out.extend(assemble(gr_resp, &gr_candidates, &[], "goodreads"));
+
+        if !out.is_empty() {
+            return Ok(out);
         }
-    } else {
-        eprintln!("[discover] douban new books failed: {:?}, falling back to LLM", new_books_result);
+        eprintln!("[discover] both LLMs returned no selections, falling back to free generation");
     }
 
     // ── Path B: 纯 LLM 自由生成（降级） ────────────────────────────────
@@ -584,15 +658,19 @@ pub async fn discover_books(
             let cn = norm_title(&c.title);
             if existing_norm.contains(&cn) || accepted_norm.contains(&cn) {
                 eprintln!("[dedup] exact   「{}」(norm={})", c.title, cn);
-            } else if let Some(hit) = existing_norm_vec.iter().chain(accepted_norm_vec.iter())
-                .find(|e| strsim::jaro_winkler(&cn, e) >= FUZZY_THRESHOLD)
-            {
-                eprintln!("[dedup] fuzzy   「{}」≈「{}」(score={:.2})",
-                    c.title, hit, strsim::jaro_winkler(&cn, hit));
             } else {
-                eprintln!("[dedup] pass    「{}」", c.title);
-                results.push(c);
-                if results.len() >= TARGET { break; }
+                let fk = fuzzy_key(&cn);
+                let fuzzy_hit = if fk.chars().count() >= MIN_FUZZY_CHARS {
+                    existing_norm_vec.iter().chain(accepted_norm_vec.iter())
+                        .find(|e| { let ek = fuzzy_key(e); ek.chars().count() >= MIN_FUZZY_CHARS && strsim::jaro_winkler(fk, ek) >= FUZZY_THRESHOLD })
+                } else { None };
+                if let Some(hit) = fuzzy_hit {
+                    eprintln!("[dedup] fuzzy   「{}」≈「{}」", c.title, hit);
+                } else {
+                    eprintln!("[dedup] pass    「{}」", c.title);
+                    results.push(c);
+                    if results.len() >= TARGET { break; }
+                }
             }
         }
     }
@@ -613,6 +691,7 @@ pub async fn discover_books(
             region: None,
             description: None,
             douban_subject_id: None,
+            source: "llm".to_string(),
         })
         .collect();
 
@@ -646,6 +725,7 @@ pub async fn enrich_book(
                     region: meta.region,
                     description: meta.description,
                     douban_subject_id: douban_subject_id.clone(),
+                    source: String::new(),
                 });
             }
         }
@@ -672,6 +752,7 @@ pub async fn enrich_book(
         region: meta.region,
         description: meta.description,
         douban_subject_id,
+        source: String::new(),
     })
 }
 
