@@ -106,7 +106,10 @@ pub async fn fetch_book(isbn: &str) -> Result<BookMeta> {
         .await?;
 
     if !resp.status().is_success() {
-        return Err(anyhow!("Goodreads 返回 HTTP {}", resp.status().as_u16()));
+        return Err(anyhow!(
+            "Goodreads 单本查询暂时不可用（HTTP {}，可能被反爬拦截），请尝试其他来源",
+            resp.status().as_u16()
+        ));
     }
 
     let html = resp.text().await?;
@@ -125,7 +128,9 @@ fn parse_book_page(html: &str, isbn: &str) -> Result<BookMeta> {
     } else { String::new() };
 
     if json_ld.is_empty() {
-        return Err(anyhow!("Goodreads: ISBN {} 的页面中未找到结构化数据", isbn));
+        return Err(anyhow!(
+            "Goodreads 单本查询暂时不可用（页面被反爬验证拦截），请尝试其他来源"
+        ));
     }
 
     let v: serde_json::Value = serde_json::from_str(&json_ld)
