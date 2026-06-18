@@ -86,21 +86,39 @@ pub async fn call_claude(prompt: &str, cfg: &AppConfig) -> Result<String> {
     Ok(text)
 }
 
-/// Extract the first JSON array from a string (strips markdown code blocks etc.)
+/// Extract the first complete JSON array from a string using bracket matching.
 pub fn extract_json_array(s: &str) -> &str {
-    if let (Some(start), Some(end)) = (s.find('['), s.rfind(']')) {
-        if start <= end {
-            return &s[start..=end];
-        }
-    }
-    s.trim()
+    extract_delimited(s, b'[', b']')
 }
 
-/// Extract the first JSON object from a string
+/// Extract the first complete JSON object from a string using bracket matching.
 pub fn extract_json_object(s: &str) -> &str {
-    if let (Some(start), Some(end)) = (s.find('{'), s.rfind('}')) {
-        if start <= end {
-            return &s[start..=end];
+    extract_delimited(s, b'{', b'}')
+}
+
+fn extract_delimited(s: &str, open: u8, close: u8) -> &str {
+    let bytes = s.as_bytes();
+    let start = match bytes.iter().position(|&b| b == open) {
+        Some(i) => i,
+        None => return s.trim(),
+    };
+    let mut depth = 0i32;
+    let mut in_str = false;
+    let mut escape = false;
+    for (i, &b) in bytes[start..].iter().enumerate() {
+        if escape { escape = false; continue; }
+        if in_str {
+            if b == b'\\' { escape = true; }
+            else if b == b'"' { in_str = false; }
+            continue;
+        }
+        if b == b'"' { in_str = true; continue; }
+        if b == open { depth += 1; }
+        else if b == close {
+            depth -= 1;
+            if depth == 0 {
+                return &s[start..start + i + 1];
+            }
         }
     }
     s.trim()

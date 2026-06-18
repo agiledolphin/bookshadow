@@ -163,7 +163,11 @@ pub fn get_books(
         conditions.push(format!("status = ?{}", param_values.len() + 1));
         param_values.push(Box::new(v));
     }
-    if let Some(v) = f.tag     { conditions.push(format!("tags LIKE ?{}", param_values.len() + 1));   param_values.push(Box::new(format!("%\"{}\"%" , v))); }
+    if let Some(v) = f.tag {
+        let escaped = v.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+        conditions.push(format!("tags LIKE ?{} ESCAPE '\\'", param_values.len() + 1));
+        param_values.push(Box::new(format!("%\"{}\"%" , escaped)));
+    }
     if let Some(ref v) = f.search_query {
         let q = v.trim();
         if !q.is_empty() {

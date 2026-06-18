@@ -44,138 +44,110 @@ struct RatedBook {
     rating: i64,
 }
 
+struct LibraryProfile {
+    rated_lines: Vec<String>,
+    cats_str: String,
+    regions_str: String,
+    tags_str: String,
+}
+
+fn load_library_profile(conn: &rusqlite::Connection) -> Result<LibraryProfile, String> {
+    let mut stmt = conn.prepare(
+        "SELECT title, author, category, region, rating FROM books \
+         WHERE rating >= 4 ORDER BY rating DESC, created_at DESC LIMIT 50",
+    ).map_err(|e| e.to_string())?;
+    let rated: Vec<RatedBook> = stmt
+        .query_map([], |r| Ok(RatedBook {
+            title: r.get::<_, String>(0)?,
+            author: r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+            category: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
+            region: r.get::<_, Option<String>>(3)?.unwrap_or_default(),
+            rating: r.get(4)?,
+        }))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    let lines: Vec<String> = rated.iter().map(|b| {
+        format!("《{}》{} [{}/{}] {}", b.title, b.author, b.category, b.region,
+            "★".repeat(b.rating as usize))
+    }).collect();
+
+    let mut stmt = conn.prepare(
+        "SELECT category, COUNT(*) FROM books \
+         WHERE rating >= 4 AND category IS NOT NULL AND category != '' \
+         GROUP BY category ORDER BY COUNT(*) DESC",
+    ).map_err(|e| e.to_string())?;
+    let cats: Vec<String> = stmt
+        .query_map([], |r| Ok(format!("{}({})", r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let mut stmt = conn.prepare(
+        "SELECT region, COUNT(*) FROM books \
+         WHERE rating >= 4 AND region IS NOT NULL AND region != '' \
+         GROUP BY region ORDER BY COUNT(*) DESC",
+    ).map_err(|e| e.to_string())?;
+    let regions: Vec<String> = stmt
+        .query_map([], |r| Ok(format!("{}({})", r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let mut stmt = conn.prepare(
+        "SELECT tags FROM books \
+         WHERE rating >= 4 AND tags IS NOT NULL AND tags NOT IN ('', '[]')",
+    ).map_err(|e| e.to_string())?;
+    let tags_raw: Vec<String> = stmt
+        .query_map([], |r| r.get::<_, String>(0))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    let mut tag_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for raw in &tags_raw {
+        if let Ok(tags) = serde_json::from_str::<Vec<String>>(raw) {
+            for tag in tags { *tag_counts.entry(tag).or_insert(0) += 1; }
+        }
+    }
+    let mut top_tags: Vec<(String, usize)> = tag_counts.into_iter().collect();
+    top_tags.sort_by(|a, b| b.1.cmp(&a.1));
+    top_tags.truncate(15);
+    let tags: Vec<String> = top_tags.into_iter().map(|(t, _)| t).collect();
+
+    Ok(LibraryProfile {
+        rated_lines: lines,
+        cats_str: if cats.is_empty() { "暂无数据".to_string() } else { cats.join("、") },
+        regions_str: if regions.is_empty() { "暂无数据".to_string() } else { regions.join("、") },
+        tags_str: if tags.is_empty() { "暂无数据".to_string() } else { tags.join("、") },
+    })
+}
+
 #[tauri::command]
 pub async fn recommend_books(
     state: State<'_, DbState>,
 ) -> Result<Vec<BookRecommendation>, String> {
     let cfg = load();
 
-    // Collect all data from DB before any await point.
     let (rated_lines, cats_str, regions_str, tags_str, want_books) = {
         let conn = state.0.lock().map_err(|e| e.to_string())?;
-
-        // Actual high-rated books (up to 50, ordered by rating desc then recency)
-        let mut stmt = conn
-            .prepare(
-                "SELECT title, author, category, region, rating FROM books \
-                 WHERE rating >= 4 ORDER BY rating DESC, created_at DESC LIMIT 50",
-            )
-            .map_err(|e| e.to_string())?;
-        let rated: Vec<RatedBook> = stmt
-            .query_map([], |r| {
-                Ok(RatedBook {
-                    title: r.get::<_, String>(0)?,
-                    author: r.get::<_, Option<String>>(1)?.unwrap_or_default(),
-                    category: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
-                    region: r.get::<_, Option<String>>(3)?.unwrap_or_default(),
-                    rating: r.get(4)?,
-                })
-            })
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect();
-
-        let lines: Vec<String> = rated
-            .iter()
-            .map(|b| {
-                format!(
-                    "《{}》{} [{}/{}] {}",
-                    b.title,
-                    b.author,
-                    b.category,
-                    b.region,
-                    "★".repeat(b.rating as usize),
-                )
-            })
-            .collect();
-
-        // Category distribution from high-rated books
-        let mut stmt = conn
-            .prepare(
-                "SELECT category, COUNT(*) FROM books \
-                 WHERE rating >= 4 AND category IS NOT NULL AND category != '' \
-                 GROUP BY category ORDER BY COUNT(*) DESC",
-            )
-            .map_err(|e| e.to_string())?;
-        let cats: Vec<String> = stmt
-            .query_map([], |r| {
-                Ok(format!("{}({})", r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
-            })
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect();
-
-        // Region distribution from high-rated books
-        let mut stmt = conn
-            .prepare(
-                "SELECT region, COUNT(*) FROM books \
-                 WHERE rating >= 4 AND region IS NOT NULL AND region != '' \
-                 GROUP BY region ORDER BY COUNT(*) DESC",
-            )
-            .map_err(|e| e.to_string())?;
-        let regions: Vec<String> = stmt
-            .query_map([], |r| {
-                Ok(format!("{}({})", r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
-            })
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect();
-
-        // Top tags from high-rated books
-        let mut stmt = conn
-            .prepare(
-                "SELECT tags FROM books \
-                 WHERE rating >= 4 AND tags IS NOT NULL AND tags NOT IN ('', '[]')",
-            )
-            .map_err(|e| e.to_string())?;
-        let tags_raw: Vec<String> = stmt
-            .query_map([], |r| r.get::<_, String>(0))
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect();
-
-        let mut tag_counts: std::collections::HashMap<String, usize> =
-            std::collections::HashMap::new();
-        for raw in &tags_raw {
-            if let Ok(tags) = serde_json::from_str::<Vec<String>>(raw) {
-                for tag in tags {
-                    *tag_counts.entry(tag).or_insert(0) += 1;
-                }
-            }
-        }
-        let mut top_tags: Vec<(String, usize)> = tag_counts.into_iter().collect();
-        top_tags.sort_by(|a, b| b.1.cmp(&a.1));
-        top_tags.truncate(15);
-        let tags: Vec<String> = top_tags.into_iter().map(|(t, _)| t).collect();
-
-        // Want-to-read books
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, title, author, category, region FROM books \
-                 WHERE status = 'want' ORDER BY created_at DESC",
-            )
-            .map_err(|e| e.to_string())?;
+        let LibraryProfile { rated_lines, cats_str, regions_str, tags_str } =
+            load_library_profile(&conn)?;
+        let mut stmt = conn.prepare(
+            "SELECT id, title, author, category, region FROM books \
+             WHERE status = 'want' ORDER BY created_at DESC",
+        ).map_err(|e| e.to_string())?;
         let want: Vec<WantBook> = stmt
-            .query_map([], |r| {
-                Ok(WantBook {
-                    id: r.get(0)?,
-                    title: r.get::<_, String>(1)?,
-                    author: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
-                    category: r.get::<_, Option<String>>(3)?.unwrap_or_default(),
-                    region: r.get::<_, Option<String>>(4)?.unwrap_or_default(),
-                })
-            })
+            .query_map([], |r| Ok(WantBook {
+                id: r.get(0)?,
+                title: r.get::<_, String>(1)?,
+                author: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                category: r.get::<_, Option<String>>(3)?.unwrap_or_default(),
+                region: r.get::<_, Option<String>>(4)?.unwrap_or_default(),
+            }))
             .map_err(|e| e.to_string())?
             .filter_map(|r| r.ok())
             .collect();
-
-        (
-            lines,
-            if cats.is_empty() { "暂无数据".to_string() } else { cats.join("、") },
-            if regions.is_empty() { "暂无数据".to_string() } else { regions.join("、") },
-            if tags.is_empty() { "暂无数据".to_string() } else { tags.join("、") },
-            want,
-        )
+        (rated_lines, cats_str, regions_str, tags_str, want)
     };
 
     if want_books.is_empty() {
@@ -306,6 +278,32 @@ fn fuzzy_key(normed: &str) -> &str {
     normed
 }
 
+fn is_new_book(
+    title: &str,
+    existing_norm: &std::collections::HashSet<String>,
+    existing_titles: &[String],
+    existing_norm_vec: &[String],
+) -> bool {
+    let cn = norm_title(title);
+    if existing_norm.contains(&cn) {
+        let matched = existing_titles.iter().find(|t| norm_title(t) == cn)
+            .map(|t| t.as_str()).unwrap_or("?");
+        eprintln!("[dedup] exact   「{}」← matched 「{}」", title, matched);
+        return false;
+    }
+    let fk = fuzzy_key(&cn);
+    if fk.chars().count() >= MIN_FUZZY_CHARS {
+        if let Some(hit) = existing_norm_vec.iter().find(|e| {
+            let ek = fuzzy_key(e);
+            ek.chars().count() >= MIN_FUZZY_CHARS && strsim::jaro_winkler(fk, ek) >= FUZZY_THRESHOLD
+        }) {
+            eprintln!("[dedup] fuzzy   「{}」≈「{}」", title, hit);
+            return false;
+        }
+    }
+    true
+}
+
 #[tauri::command]
 pub async fn discover_books(
     state: State<'_, DbState>,
@@ -317,109 +315,17 @@ pub async fn discover_books(
 
     let (rated_lines, cats_str, regions_str, tags_str, existing_titles) = {
         let conn = state.0.lock().map_err(|e| e.to_string())?;
-
-        let mut stmt = conn
-            .prepare(
-                "SELECT title, author, category, region, rating FROM books \
-                 WHERE rating >= 4 ORDER BY rating DESC, created_at DESC LIMIT 50",
-            )
-            .map_err(|e| e.to_string())?;
-        let rated: Vec<RatedBook> = stmt
-            .query_map([], |r| {
-                Ok(RatedBook {
-                    title: r.get::<_, String>(0)?,
-                    author: r.get::<_, Option<String>>(1)?.unwrap_or_default(),
-                    category: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
-                    region: r.get::<_, Option<String>>(3)?.unwrap_or_default(),
-                    rating: r.get(4)?,
-                })
-            })
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect();
-
-        let lines: Vec<String> = rated
-            .iter()
-            .map(|b| {
-                format!(
-                    "《{}》{} [{}/{}] {}",
-                    b.title, b.author, b.category, b.region,
-                    "★".repeat(b.rating as usize),
-                )
-            })
-            .collect();
-
-        let mut stmt = conn
-            .prepare(
-                "SELECT category, COUNT(*) FROM books \
-                 WHERE rating >= 4 AND category IS NOT NULL AND category != '' \
-                 GROUP BY category ORDER BY COUNT(*) DESC",
-            )
-            .map_err(|e| e.to_string())?;
-        let cats: Vec<String> = stmt
-            .query_map([], |r| {
-                Ok(format!("{}({})", r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
-            })
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect();
-
-        let mut stmt = conn
-            .prepare(
-                "SELECT region, COUNT(*) FROM books \
-                 WHERE rating >= 4 AND region IS NOT NULL AND region != '' \
-                 GROUP BY region ORDER BY COUNT(*) DESC",
-            )
-            .map_err(|e| e.to_string())?;
-        let regions: Vec<String> = stmt
-            .query_map([], |r| {
-                Ok(format!("{}({})", r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
-            })
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect();
-
-        let mut stmt = conn
-            .prepare(
-                "SELECT tags FROM books \
-                 WHERE rating >= 4 AND tags IS NOT NULL AND tags NOT IN ('', '[]')",
-            )
-            .map_err(|e| e.to_string())?;
-        let tags_raw: Vec<String> = stmt
-            .query_map([], |r| r.get::<_, String>(0))
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect();
-        let mut tag_counts: std::collections::HashMap<String, usize> =
-            std::collections::HashMap::new();
-        for raw in &tags_raw {
-            if let Ok(tags) = serde_json::from_str::<Vec<String>>(raw) {
-                for tag in tags {
-                    *tag_counts.entry(tag).or_insert(0) += 1;
-                }
-            }
-        }
-        let mut top_tags: Vec<(String, usize)> = tag_counts.into_iter().collect();
-        top_tags.sort_by(|a, b| b.1.cmp(&a.1));
-        top_tags.truncate(15);
-        let tags: Vec<String> = top_tags.into_iter().map(|(t, _)| t).collect();
-
-        let mut stmt = conn
-            .prepare("SELECT title FROM books WHERE title IS NOT NULL AND title != ''")
-            .map_err(|e| e.to_string())?;
+        let LibraryProfile { rated_lines, cats_str, regions_str, tags_str } =
+            load_library_profile(&conn)?;
+        let mut stmt = conn.prepare(
+            "SELECT title FROM books WHERE title IS NOT NULL AND title != ''"
+        ).map_err(|e| e.to_string())?;
         let titles: Vec<String> = stmt
             .query_map([], |r| r.get::<_, String>(0))
             .map_err(|e| e.to_string())?
             .filter_map(|r| r.ok())
             .collect();
-
-        (
-            lines,
-            if cats.is_empty() { "暂无数据".to_string() } else { cats.join("、") },
-            if regions.is_empty() { "暂无数据".to_string() } else { regions.join("、") },
-            if tags.is_empty() { "暂无数据".to_string() } else { tags.join("、") },
-            titles,
-        )
+        (rated_lines, cats_str, regions_str, tags_str, titles)
     };
 
     let existing_norm_vec: Vec<String> =
@@ -450,45 +356,13 @@ pub async fn discover_books(
         eprintln!("[discover] goodreads failed: {}", e); vec![]
     });
 
-    let douban_candidates: Vec<&isbn::douban::NewBookEntry> = douban_entries.iter().filter(|b| {
-        let cn = norm_title(&b.title);
-        if existing_norm.contains(&cn) {
-            let matched = existing_titles.iter().find(|t| norm_title(t) == cn)
-                .map(|t| t.as_str()).unwrap_or("?");
-            eprintln!("[dedup] exact   「{}」← matched 「{}」", b.title, matched);
-            return false;
-        }
-        let fk = fuzzy_key(&cn);
-        if fk.chars().count() >= MIN_FUZZY_CHARS {
-            if let Some(hit) = existing_norm_vec.iter()
-                .find(|e| { let ek = fuzzy_key(e); ek.chars().count() >= MIN_FUZZY_CHARS && strsim::jaro_winkler(fk, ek) >= FUZZY_THRESHOLD })
-            {
-                eprintln!("[dedup] fuzzy   「{}」≈「{}」", b.title, hit);
-                return false;
-            }
-        }
-        true
-    }).collect();
+    let douban_candidates: Vec<&isbn::douban::NewBookEntry> = douban_entries.iter()
+        .filter(|b| is_new_book(&b.title, &existing_norm, &existing_titles, &existing_norm_vec))
+        .collect();
 
-    let gr_candidates: Vec<&isbn::douban::NewBookEntry> = gr_entries.iter().filter(|b| {
-        let cn = norm_title(&b.title);
-        if existing_norm.contains(&cn) {
-            let matched = existing_titles.iter().find(|t| norm_title(t) == cn)
-                .map(|t| t.as_str()).unwrap_or("?");
-            eprintln!("[dedup] exact   「{}」← matched 「{}」", b.title, matched);
-            return false;
-        }
-        let fk = fuzzy_key(&cn);
-        if fk.chars().count() >= MIN_FUZZY_CHARS {
-            if let Some(hit) = existing_norm_vec.iter()
-                .find(|e| { let ek = fuzzy_key(e); ek.chars().count() >= MIN_FUZZY_CHARS && strsim::jaro_winkler(fk, ek) >= FUZZY_THRESHOLD })
-            {
-                eprintln!("[dedup] fuzzy   「{}」≈「{}」", b.title, hit);
-                return false;
-            }
-        }
-        true
-    }).collect();
+    let gr_candidates: Vec<&isbn::douban::NewBookEntry> = gr_entries.iter()
+        .filter(|b| is_new_book(&b.title, &existing_norm, &existing_titles, &existing_norm_vec))
+        .collect();
 
     eprintln!("[discover] douban {} candidates, goodreads {} candidates",
         douban_candidates.len(), gr_candidates.len());
@@ -708,6 +582,9 @@ pub async fn enrich_book(
 
     // If we have a subject_id from the new-books scrape, fetch directly — faster and more accurate
     if let Some(ref sid) = douban_subject_id {
+        if !sid.chars().all(|c| c.is_ascii_digit()) {
+            return Err(format!("无效的豆瓣 subject_id: {}", sid));
+        }
         let subject_url = format!("https://book.douban.com/subject/{}/", sid);
         if let Ok(meta) = isbn::douban::fetch(&subject_url, cfg.douban_cookie.as_deref()).await {
             if meta.title.is_some() || meta.publisher.is_some() {

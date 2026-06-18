@@ -48,7 +48,7 @@ pub fn export_books(state: State<'_, DbState>, path: String, format: String) -> 
                     csv_field(&b.created_at),
                 ));
             }
-            std::fs::write(&path, lines.join("\n")).map_err(|e| e.to_string())?;
+            std::fs::write(&path, lines.join("\r\n")).map_err(|e| e.to_string())?;
         }
         _ => return Err(format!("unsupported format: {}", format)),
     }

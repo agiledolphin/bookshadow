@@ -1,5 +1,6 @@
 use crate::db::DbState;
 use serde::Serialize;
+use std::collections::HashMap;
 use tauri::State;
 
 #[derive(Debug, Serialize)]
@@ -36,21 +37,25 @@ pub struct ReadingStats {
 pub fn get_stats(state: State<'_, DbState>) -> Result<ReadingStats, String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
 
-    let total = conn
-        .query_row("SELECT COUNT(*) FROM books", [], |r| r.get::<_, i64>(0))
-        .map_err(|e| e.to_string())?;
-    let read = conn
-        .query_row("SELECT COUNT(*) FROM books WHERE status = 'read'", [], |r| r.get::<_, i64>(0))
-        .map_err(|e| e.to_string())?;
-    let reading = conn
-        .query_row("SELECT COUNT(*) FROM books WHERE status = 'reading'", [], |r| r.get::<_, i64>(0))
-        .map_err(|e| e.to_string())?;
-    let want = conn
-        .query_row("SELECT COUNT(*) FROM books WHERE status = 'want'", [], |r| r.get::<_, i64>(0))
-        .map_err(|e| e.to_string())?;
-    let tobuy = conn
-        .query_row("SELECT COUNT(*) FROM books WHERE status = 'tobuy'", [], |r| r.get::<_, i64>(0))
-        .map_err(|e| e.to_string())?;
+    let status_counts = {
+        let mut stmt = conn.prepare(
+            "SELECT COALESCE(status, ''), COUNT(*) FROM books GROUP BY COALESCE(status, '')"
+        ).map_err(|e| e.to_string())?;
+        let mut map: HashMap<String, i64> = HashMap::new();
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
+            .map_err(|e| e.to_string())?;
+        for r in rows {
+            let (k, v) = r.map_err(|e| e.to_string())?;
+            map.insert(k, v);
+        }
+        StatusCounts {
+            total: map.values().sum(),
+            read: map.get("read").copied().unwrap_or(0),
+            reading: map.get("reading").copied().unwrap_or(0),
+            want: map.get("want").copied().unwrap_or(0),
+            tobuy: map.get("tobuy").copied().unwrap_or(0),
+        }
+    };
 
     let yearly = {
         let sql = "SELECT CAST(substr(finished_at,1,4) AS INTEGER), COUNT(*) \
@@ -95,7 +100,7 @@ pub fn get_stats(state: State<'_, DbState>) -> Result<ReadingStats, String> {
     };
 
     Ok(ReadingStats {
-        status_counts: StatusCounts { total, read, reading, want, tobuy },
+        status_counts,
         yearly,
         by_category,
         by_region,

@@ -55,7 +55,7 @@ export default function App() {
     }
   };
 
-  const handleMarkPurchased = async (book: Book) => {
+  const handleMarkWant = async (book: Book) => {
     try {
       await updateBook(book.id, { status: "want" });
       fetchBooks(true);
@@ -305,9 +305,9 @@ export default function App() {
               <span className="text-sm">加载中…</span>
             </div>
           ) : viewMode === "grid" ? (
-            <BookGrid books={displayBooks} hasMore={hasMore} isLoadingMore={isLoadingMore} onSelect={setSelectedBook} onDelete={handleDelete} onMarkPurchased={handleMarkPurchased} onLoadMore={loadMoreBooks} />
+            <BookGrid books={displayBooks} hasMore={hasMore} isLoadingMore={isLoadingMore} onSelect={setSelectedBook} onDelete={handleDelete} onMarkPurchased={handleMarkWant} onLoadMore={loadMoreBooks} />
           ) : (
-            <BookList books={displayBooks} hasMore={hasMore} isLoadingMore={isLoadingMore} onSelect={setSelectedBook} onDelete={handleDelete} onMarkPurchased={handleMarkPurchased} onLoadMore={loadMoreBooks} />
+            <BookList books={displayBooks} hasMore={hasMore} isLoadingMore={isLoadingMore} onSelect={setSelectedBook} onDelete={handleDelete} onMarkPurchased={handleMarkWant} onLoadMore={loadMoreBooks} />
           )}
         </main>
       </div>

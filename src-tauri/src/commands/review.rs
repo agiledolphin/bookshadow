@@ -78,20 +78,22 @@ pub fn update_review(
     payload: UpdateReview,
 ) -> Result<Review, String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
-    if let Some(content) = &payload.content {
-        conn.execute(
+    match (&payload.content, &payload.reviewed_at) {
+        (Some(content), Some(reviewed_at)) => conn.execute(
+            "UPDATE reviews SET content=?2, reviewed_at=?3, updated_at=datetime('now') WHERE id=?1",
+            params![id, content, reviewed_at],
+        ),
+        (Some(content), None) => conn.execute(
             "UPDATE reviews SET content=?2, updated_at=datetime('now') WHERE id=?1",
             params![id, content],
-        )
-        .map_err(|e| e.to_string())?;
-    }
-    if let Some(reviewed_at) = &payload.reviewed_at {
-        conn.execute(
+        ),
+        (None, Some(reviewed_at)) => conn.execute(
             "UPDATE reviews SET reviewed_at=?2, updated_at=datetime('now') WHERE id=?1",
             params![id, reviewed_at],
-        )
-        .map_err(|e| e.to_string())?;
+        ),
+        (None, None) => Ok(0),
     }
+    .map_err(|e| e.to_string())?;
     conn.query_row(
         "SELECT id,book_id,content,reviewed_at,created_at,updated_at FROM reviews WHERE id=?1",
         params![id],

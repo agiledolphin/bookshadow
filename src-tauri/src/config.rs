@@ -24,6 +24,8 @@ pub fn load() -> AppConfig {
 pub fn save(cfg: &AppConfig) -> Result<()> {
     let path = config_path();
     let text = serde_json::to_string_pretty(cfg)?;
-    std::fs::write(&path, text)?;
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, &text)?;
+    std::fs::rename(&tmp, &path)?;
     Ok(())
 }

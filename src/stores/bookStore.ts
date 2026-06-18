@@ -46,6 +46,8 @@ interface BookStore {
   importReviewMd: (bookId: number, path: string) => Promise<Review>;
 }
 
+let fetchSerial = 0;
+
 export const useBookStore = create<BookStore>((set, get) => ({
   books: [],
   selectedBook: null,
@@ -63,6 +65,8 @@ export const useBookStore = create<BookStore>((set, get) => ({
   error: null,
 
   fetchBooks: async (reset = true) => {
+    fetchSerial += 1;
+    const serial = fetchSerial;
     const { filters, books } = get();
     const offset = reset ? 0 : books.length;
 
@@ -77,6 +81,7 @@ export const useBookStore = create<BookStore>((set, get) => ({
       const newBooks = await invoke<Book[]>("get_books", {
         filters: { ...filters, limit: PAGE_SIZE, offset },
       });
+      if (serial !== fetchSerial) return;
       set((s) => ({
         books: reset ? newBooks : [...s.books, ...newBooks],
         hasMore: newBooks.length === PAGE_SIZE,
@@ -84,6 +89,7 @@ export const useBookStore = create<BookStore>((set, get) => ({
         isLoadingMore: false,
       }));
     } catch (e) {
+      if (serial !== fetchSerial) return;
       set({ error: String(e), loading: false, isLoadingMore: false });
     }
   },

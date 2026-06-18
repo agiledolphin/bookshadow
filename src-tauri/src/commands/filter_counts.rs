@@ -79,8 +79,9 @@ fn build_where(f: &BookFilters, exclude: &str) -> (String, Vec<Box<dyn ToSql>>) 
     }
     if exclude != "tag" {
         if let Some(ref v) = f.tag {
-            conds.push(format!("tags LIKE ?{}", params.len() + 1));
-            params.push(Box::new(format!("%\"{}\"%" , v)));
+            let escaped = v.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+            conds.push(format!("tags LIKE ?{} ESCAPE '\\'", params.len() + 1));
+            params.push(Box::new(format!("%\"{}\"%" , escaped)));
         }
     }
     if exclude != "decade" {
