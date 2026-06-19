@@ -123,8 +123,9 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
         region: meta.region ?? f.region,
         category: meta.category ?? f.category,
         isbn: meta.isbn ?? (isDoubanUrl ? "" : isbnInput.trim()),
-        rating: meta.rating ?? f.rating,
         series: meta.series ?? f.series,
+        douban_rating: meta.douban_rating ?? f.douban_rating,
+        goodreads_rating: meta.goodreads_rating ?? f.goodreads_rating,
       }));
     } catch (e) {
       setFetchError(String(e));
@@ -302,6 +303,12 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
                 <div className="mt-2 flex justify-center">
                   <StarRating value={form.rating ?? 0} onChange={v => set("rating", v)} />
                 </div>
+                {(form.douban_rating != null || form.goodreads_rating != null) && (
+                  <div className="mt-1 text-center text-xs text-gray-400 leading-tight">
+                    {form.douban_rating != null && <div>豆瓣 {form.douban_rating.toFixed(1)}</div>}
+                    {form.goodreads_rating != null && <div>Goodreads {form.goodreads_rating.toFixed(2)}</div>}
+                  </div>
+                )}
               </div>
 
               {/* Form fields */}
@@ -600,6 +607,8 @@ function makeForm(book: Book): CreateBook {
     started_at: book.started_at,
     finished_at: book.finished_at,
     series: book.series ?? "",
+    douban_rating: book.douban_rating,
+    goodreads_rating: book.goodreads_rating,
   };
 }
 

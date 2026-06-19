@@ -107,12 +107,14 @@ CREATE TABLE books (
     cover_local TEXT,           -- 本地缓存路径
     description TEXT,
     translator  TEXT,
-    status      TEXT,           -- 'want' | 'reading' | 'read' | 'tobuy'
-    started_at  TEXT,           -- YYYY-MM-DD
-    finished_at TEXT,           -- YYYY-MM-DD
-    series      TEXT,
-    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    status         TEXT,           -- 'want' | 'reading' | 'read' | 'tobuy'
+    started_at     TEXT,           -- YYYY-MM-DD
+    finished_at    TEXT,           -- YYYY-MM-DD
+    series         TEXT,
+    douban_rating  REAL,           -- 豆瓣社区评分（10 分制，仅供参考）
+    goodreads_rating REAL,         -- Goodreads 社区评分（5 分制，仅供参考）
+    created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 ```
 
@@ -429,12 +431,52 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 - [x] **来源选择器全覆盖**：BookForm、BookDetail 编辑模式、BatchImportModal header 均加入 Goodreads 选项；批量导入默认豆瓣，整批来源一次切换
 - [x] **统计看板**：新增「待购」KPI 卡片（橙色）；新增「作者榜」Tab，SQL `GROUP BY author` 取前 20，`HorizontalBarChart` 支持 `labelWidth` prop
 
+### Phase 22：代码质量修复 + 社区评分 ✅（v0.9.1 / v0.9.2）
+
+#### v0.9.1 — Code Review 修复
+
+**高优先级（安全/数据完整性）**
+
+- [x] `update_review`：两次独立 UPDATE 合并为单次原子 UPDATE（match 四分支）
+- [x] tag LIKE 查询转义 `%` `_` `\`（`book.rs` + `filter_counts.rs`，加 `ESCAPE '\\'`）
+- [x] `enrich_book`：验证 `douban_subject_id` 只含数字，拒绝注入
+- [x] `config.save()`：先写 `.json.tmp` 再 `rename`，原子写入防断电损坏
+
+**中优先级（逻辑/可维护性）**
+
+- [x] `stats.rs`：5 次独立 COUNT 合并为单次 GROUP BY
+- [x] `llm/mod.rs`：JSON 提取改为栈式括号 + 字符串状态机追踪，防嵌套截断
+- [x] `commands/llm.rs`：提取 `LibraryProfile` + `load_library_profile()`，消除 `recommend_books` / `discover_books` 约 60 行重复 DB 查询；提取 `is_new_book()` 消除 dedup 闭包重复
+- [x] `export.rs`：CSV 行分隔改为 `\r\n`（RFC 4180 合规）
+- [x] `App.tsx`：`handleMarkPurchased` 改名 `handleMarkWant`（语义准确）
+- [x] `bookStore.ts`：`fetchBooks` 加模块级 `fetchSerial` 计数器，丢弃乱序返回的旧响应
+
+**Goodreads 单本查询修复**
+
+- [x] 根本原因：AWS WAF 对浏览器仿冒 UA 触发 JS Challenge（返回 202），非浏览器 UA 直接放行
+- [x] User-Agent 改为 `BookShadow/0.9`，WAF 绕过
+- [x] 新增从 `__NEXT_DATA__` 提取字段：`description`（Goodreads 自带 stripped 版优先）、`publisher`（`details.publisher`）、`pub_date`（`details.publicationTime` Unix ms → YYYY-MM-DD）
+
+#### v0.9.2 — 社区评分
+
+**目标**：展示豆瓣 / Goodreads 社区评分供参考，不自动写入用户个人星级。
+
+- [x] DB schema 新增 `douban_rating REAL` / `goodreads_rating REAL`（`ALTER TABLE` migration，已有库忽略错误）
+- [x] Rust `BookMeta` 新增 `douban_rating: Option<f64>` / `goodreads_rating: Option<f64>`；豆瓣保留原始 10 分制浮点，Goodreads 取 JSON-LD `aggregateRating.ratingValue`
+- [x] `Book` / `CreateBook` / `UpdateBook` struct 同步新增字段；`SELECT_COLS` 末尾追加两列（索引 21/22）；`create_book` INSERT / `update_book` `push_field!` 均写库
+- [x] TypeScript `Book` / `CreateBook` / `BookMeta` 同步新增 `douban_rating?` / `goodreads_rating?`
+- [x] `BookDetail`：编辑模式左侧封面区星级下方显示「豆瓣 8.2 / Goodreads 4.13」（灰色小字，竖排）；`makeForm` 从 `book` 初始化，ISBN 获取后 merge 更新，保存时入库
+- [x] `BookForm`：星级选择器右侧内联显示参考评分，逻辑与 BookDetail 相同
+- [x] 个人星级不再自动填写（移除两处 `rating: meta.rating ?? f.rating`）
+
 ---
 
 ## 七、关键设计决策
 
 | 决策 | 原因 |
 |------|------|
+| 社区评分独立字段，不写入个人星级 | 豆瓣/GR 评分是群体均值（10/5 分制），与用户自己的 1-5 星评价语义不同；分开存储，编辑时只展示不填充 |
+| Goodreads UA 用非浏览器字符串 | AWS WAF 仅对浏览器仿冒 UA 触发 JS Challenge；`BookShadow/0.9` 直接放行，无需模拟 TLS 指纹 |
 | `SELECT_COLS` 常量 + `row_to_book` 按索引映射 | 避免字段顺序不一致导致的 bug |
 | `bookcover://` 自定义协议 | 安全地服务本地封面，防路径穿越 |
 | `data-tauri-drag-region` 需显式声明 `core:window:allow-start-dragging` | 不在 `core:default` 中，需手动加入 capabilities |

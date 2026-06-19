@@ -93,8 +93,9 @@ fn extract_id(href: &str) -> Option<String> {
 pub async fn fetch_book(isbn: &str) -> Result<BookMeta> {
     let url = format!("https://www.goodreads.com/book/isbn/{}", isbn.trim());
 
+    // Non-browser UA bypasses the AWS WAF JS challenge that blocks browser-mimicking clients.
     let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+        .user_agent("BookShadow/0.9")
         .timeout(std::time::Duration::from_secs(20))
         .build()?;
 
@@ -162,6 +163,12 @@ fn parse_book_page(html: &str, isbn: &str) -> Result<BookMeta> {
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
 
+    let goodreads_rating = v["aggregateRating"]["ratingValue"]
+        .as_f64()
+        .filter(|&r| r > 0.0);
+
+    let next = extract_next_data(html);
+
     Ok(BookMeta {
         title: Some(title),
         author,
@@ -169,8 +176,110 @@ fn parse_book_page(html: &str, isbn: &str) -> Result<BookMeta> {
         isbn: isbn_val,
         language,
         series,
+        description: next.description,
+        publisher: next.publisher,
+        pub_date: next.pub_date,
+        goodreads_rating,
         ..Default::default()
     })
+}
+
+fn html_decode(s: &str) -> String {
+    s.replace("&amp;", "&")
+     .replace("&quot;", "\"")
+     .replace("&#x27;", "'")
+     .replace("&#39;", "'")
+     .replace("&lt;", "<")
+     .replace("&gt;", ">")
+}
+
+fn strip_tags(s: &str) -> String {
+    let decoded = html_decode(s);
+    let mut out = String::with_capacity(decoded.len());
+    let mut in_tag = false;
+    for c in decoded.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            '\n' | '\r' if !in_tag => out.push(c),
+            _ if !in_tag => out.push(c),
+            _ => {}
+        }
+    }
+    // Collapse runs of whitespace while preserving paragraph breaks
+    out.trim().to_string()
+}
+
+struct NextDataBook {
+    description: Option<String>,
+    publisher: Option<String>,
+    pub_date: Option<String>,
+}
+
+fn find_next_data_book(v: &serde_json::Value) -> Option<NextDataBook> {
+    match v {
+        serde_json::Value::Object(map) => {
+            let has_title = map.contains_key("title")
+                || map.contains_key("titleText")
+                || map.contains_key("bookTitleBare");
+            if has_title {
+                // Prefer Goodreads' own pre-stripped description over our HTML stripping
+                let description = map.get("description({\"stripped\":true})")
+                    .and_then(|d| d.as_str())
+                    .map(|s| s.trim().to_string())
+                    .or_else(|| {
+                        map.get("description")
+                            .and_then(|d| d.as_str())
+                            .map(strip_tags)
+                    })
+                    .filter(|s| s.len() > 20)
+                    .map(|s| s.chars().take(2000).collect());
+
+                let details = map.get("details");
+                let publisher = details
+                    .and_then(|d| d.get("publisher"))
+                    .and_then(|p| p.as_str())
+                    .filter(|s| !s.is_empty())
+                    .map(html_decode);
+                let pub_date = details
+                    .and_then(|d| d.get("publicationTime"))
+                    .and_then(|t| t.as_i64())
+                    .and_then(|ts_ms| {
+                        use chrono::TimeZone;
+                        chrono::Utc.timestamp_opt(ts_ms / 1000, 0).single()
+                            .map(|dt| dt.format("%Y-%m-%d").to_string())
+                    });
+
+                if description.is_some() || publisher.is_some() || pub_date.is_some() {
+                    return Some(NextDataBook { description, publisher, pub_date });
+                }
+            }
+            for val in map.values() {
+                if let Some(b) = find_next_data_book(val) { return Some(b); }
+            }
+            None
+        }
+        serde_json::Value::Array(arr) => {
+            for val in arr {
+                if let Some(b) = find_next_data_book(val) { return Some(b); }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+fn extract_next_data(html: &str) -> NextDataBook {
+    let extract = || -> Option<NextDataBook> {
+        let start = html.find("id=\"__NEXT_DATA__\"")?;
+        let after = &html[start..];
+        let open = after.find('>')?;
+        let content = &after[open + 1..];
+        let close = content.find("</script>")?;
+        let v: serde_json::Value = serde_json::from_str(&content[..close]).ok()?;
+        find_next_data_book(&v)
+    };
+    extract().unwrap_or(NextDataBook { description: None, publisher: None, pub_date: None })
 }
 
 fn parse_title_series(raw: &str) -> (String, Option<String>) {

@@ -136,13 +136,7 @@ pub async fn search_by_title_author(title: &str, author: &str) -> Result<BookMet
         publisher: doc.publisher.and_then(|v| v.into_iter().next()),
         pub_date: doc.first_publish_year.map(|y| y.to_string()),
         category: map_subject_to_category(&subjects),
-        translator: None,
-        region: None,
-        isbn: None,
-        description: None,
-        language: None,
-        rating: None,
-        series: None,
+        ..Default::default()
     })
 }
 
@@ -202,8 +196,6 @@ pub async fn fetch(isbn: &str) -> Result<BookMeta> {
     Ok(BookMeta {
         title: entry.title,
         author,
-        translator: None,
-        region: None,
         category,
         publisher,
         pub_date,
@@ -211,7 +203,6 @@ pub async fn fetch(isbn: &str) -> Result<BookMeta> {
         description,
         language,
         isbn: Some(isbn.to_string()),
-        rating: None,
-        series: None,
+        ..Default::default()
     })
 }

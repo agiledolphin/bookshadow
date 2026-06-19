@@ -176,8 +176,6 @@ async fn fetch_url(url: &str) -> Result<BookMeta> {
     Ok(BookMeta {
         title: vi.title,
         author: vi.authors.map(|a| a.join(", ")),
-        translator: None,
-        region: None,
         publisher: vi.publisher,
         pub_date,
         cover_url,
@@ -185,8 +183,7 @@ async fn fetch_url(url: &str) -> Result<BookMeta> {
         language,
         category,
         isbn: isbn_val,
-        rating: None,
-        series: None,
+        ..Default::default()
     })
 }
 

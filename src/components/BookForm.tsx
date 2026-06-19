@@ -47,6 +47,8 @@ export function BookForm({ book, onClose }: Props) {
     started_at: book?.started_at,
     finished_at: book?.finished_at,
     series: book?.series ?? "",
+    douban_rating: book?.douban_rating,
+    goodreads_rating: book?.goodreads_rating,
   });
   const [isbnInput, setIsbnInput] = useState(book?.isbn ?? "");
   const [isbnSource, setIsbnSource] = useState<"douban" | "goodreads" | "google" | "openlibrary" | "auto">("douban");
@@ -81,8 +83,9 @@ export function BookForm({ book, onClose }: Props) {
         region: meta.region ?? f.region,
         category: meta.category ?? f.category,
         isbn: meta.isbn ?? (isDoubanUrl ? "" : isbnInput.trim()),
-        rating: meta.rating ?? f.rating,
         series: meta.series ?? f.series,
+        douban_rating: meta.douban_rating ?? f.douban_rating,
+        goodreads_rating: meta.goodreads_rating ?? f.goodreads_rating,
       }));
     } catch (e) {
       setFetchError(String(e));
@@ -319,7 +322,19 @@ export function BookForm({ book, onClose }: Props) {
           )}
 
           <Field label="星级">
-            <StarRating value={form.rating ?? 0} onChange={(v) => set("rating", v)} />
+            <div className="flex items-center gap-3">
+              <StarRating value={form.rating ?? 0} onChange={(v) => set("rating", v)} />
+              {(form.douban_rating != null || form.goodreads_rating != null) && (
+                <span className="text-xs text-gray-400 flex gap-2">
+                  {form.douban_rating != null && (
+                    <span>豆瓣 {form.douban_rating.toFixed(1)}/10</span>
+                  )}
+                  {form.goodreads_rating != null && (
+                    <span>Goodreads {form.goodreads_rating.toFixed(2)}/5</span>
+                  )}
+                </span>
+              )}
+            </div>
           </Field>
 
           <div className="grid grid-cols-3 gap-3">

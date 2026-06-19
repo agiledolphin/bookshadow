@@ -93,14 +93,14 @@ pub async fn fetch(isbn_or_url: &str, cookie: Option<&str>) -> Result<BookMeta> 
         .get("出版年")
         .and_then(|s| super::normalize_date(s));
 
-    // 豆瓣评分 → 1-5 星
+    // 豆瓣社区评分（10 分制，仅供参考，不填写用户个人星级）
     let rating_sel = Selector::parse(SEL_RATING).unwrap();
-    let rating = doc
+    let douban_rating = doc
         .select(&rating_sel)
         .next()
         .and_then(|e| e.text().next())
-        .and_then(|t| t.trim().parse::<f32>().ok())
-        .map(|score| ((score / 2.0).round() as i32).clamp(1, 5));
+        .and_then(|t| t.trim().parse::<f64>().ok())
+        .filter(|&r| r > 0.0);
 
     // 简介
     let desc_sel = Selector::parse(SEL_DESC).unwrap();
@@ -133,10 +133,10 @@ pub async fn fetch(isbn_or_url: &str, cookie: Option<&str>) -> Result<BookMeta> 
         description: if description.is_empty() { None } else { Some(description) },
         language: Some("中文".to_string()),
         region,
-        category: None,
         isbn: isbn_val,
-        rating,
         series,
+        douban_rating,
+        ..Default::default()
     })
 }
 

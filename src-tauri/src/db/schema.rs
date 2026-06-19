@@ -46,5 +46,9 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         "UPDATE books SET status = 'want' WHERE status IS NULL OR status = '';"
     )?;
 
+    // Migrations: ignore errors when column already exists
+    let _ = conn.execute_batch("ALTER TABLE books ADD COLUMN douban_rating REAL;");
+    let _ = conn.execute_batch("ALTER TABLE books ADD COLUMN goodreads_rating REAL;");
+
     Ok(())
 }

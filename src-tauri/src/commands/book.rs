@@ -38,6 +38,8 @@ pub struct Book {
     pub started_at: Option<String>,
     pub finished_at: Option<String>,
     pub series: Option<String>,
+    pub douban_rating: Option<f64>,
+    pub goodreads_rating: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -59,6 +61,8 @@ pub struct CreateBook {
     pub started_at: Option<String>,
     pub finished_at: Option<String>,
     pub series: Option<String>,
+    pub douban_rating: Option<f64>,
+    pub goodreads_rating: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -80,6 +84,8 @@ pub struct UpdateBook {
     pub started_at: Option<String>,
     pub finished_at: Option<String>,
     pub series: Option<String>,
+    pub douban_rating: Option<f64>,
+    pub goodreads_rating: Option<f64>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -109,7 +115,7 @@ pub fn resolve_order_by(sort_by: Option<&str>) -> &'static str {
 }
 
 pub const SELECT_COLS: &str =
-    "id,title,author,isbn,publisher,pub_date,language,region,category,tags,rating,cover_url,cover_local,description,translator,created_at,updated_at,status,started_at,finished_at,series";
+    "id,title,author,isbn,publisher,pub_date,language,region,category,tags,rating,cover_url,cover_local,description,translator,created_at,updated_at,status,started_at,finished_at,series,douban_rating,goodreads_rating";
 
 pub fn row_to_book(row: &rusqlite::Row<'_>) -> rusqlite::Result<Book> {
     Ok(Book {
@@ -134,6 +140,8 @@ pub fn row_to_book(row: &rusqlite::Row<'_>) -> rusqlite::Result<Book> {
         started_at: row.get(18)?,
         finished_at: row.get(19)?,
         series: row.get(20)?,
+        douban_rating: row.get(21)?,
+        goodreads_rating: row.get(22)?,
     })
 }
 
@@ -247,14 +255,15 @@ pub fn create_book(state: State<'_, DbState>, mut payload: CreateBook) -> Result
     }
 
     conn.execute(
-        "INSERT INTO books (title,author,isbn,publisher,pub_date,language,region,category,tags,rating,cover_url,description,translator,status,started_at,finished_at,series) \
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
+        "INSERT INTO books (title,author,isbn,publisher,pub_date,language,region,category,tags,rating,cover_url,description,translator,status,started_at,finished_at,series,douban_rating,goodreads_rating) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)",
         params![
             payload.title, payload.author, payload.isbn, payload.publisher,
             payload.pub_date, payload.language, payload.region, payload.category,
             payload.tags.unwrap_or_else(|| "[]".into()),
             payload.rating, payload.cover_url, payload.description, payload.translator,
-            payload.status, payload.started_at, payload.finished_at, payload.series
+            payload.status, payload.started_at, payload.finished_at, payload.series,
+            payload.douban_rating, payload.goodreads_rating
         ],
     )
     .map_err(|e| e.to_string())?;
@@ -303,7 +312,9 @@ pub fn update_book(
     push_field!(payload.cover_url,   "cover_url");
     push_field!(payload.description, "description");
     push_field!(payload.translator,  "translator");
-    push_field!(payload.series, "series");
+    push_field!(payload.series,           "series");
+    push_field!(payload.douban_rating,    "douban_rating");
+    push_field!(payload.goodreads_rating, "goodreads_rating");
     if let Some(v) = payload.status {
         sets.push(format!("status=nullif(?{},'')", param_values.len() + 1));
         param_values.push(Box::new(v));

@@ -20,6 +20,8 @@ export interface Book {
   started_at?: string;
   finished_at?: string;
   series?: string;
+  douban_rating?: number;
+  goodreads_rating?: number;
 }
 
 export interface Review {
@@ -45,6 +47,8 @@ export interface BookMeta {
   isbn?: string;
   rating?: number;
   series?: string;
+  douban_rating?: number;
+  goodreads_rating?: number;
 }
 
 export interface BookFilters {
@@ -79,6 +83,8 @@ export interface CreateBook {
   started_at?: string;
   finished_at?: string;
   series?: string;
+  douban_rating?: number;
+  goodreads_rating?: number;
 }
 
 export type UpdateBook = Partial<CreateBook>;
