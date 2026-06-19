@@ -229,6 +229,10 @@ export const useBookStore = create<BookStore>((set, get) => ({
   createReview: async (payload) => {
     const review = await invoke<Review>("create_review", { payload });
     set((s) => ({ reviews: [review, ...s.reviews] }));
+    get().patchBook(payload.book_id, {
+      review_count: (get().books.find((b) => b.id === payload.book_id)?.review_count ?? 0) + 1,
+    });
+    get().fetchFilterCounts();
     return review;
   },
 
@@ -242,13 +246,24 @@ export const useBookStore = create<BookStore>((set, get) => ({
   },
 
   deleteReview: async (id) => {
+    const target = get().reviews.find((r) => r.id === id);
     await invoke("delete_review", { id });
     set((s) => ({ reviews: s.reviews.filter((r) => r.id !== id) }));
+    if (target) {
+      get().patchBook(target.book_id, {
+        review_count: Math.max(0, (get().books.find((b) => b.id === target.book_id)?.review_count ?? 1) - 1),
+      });
+    }
+    get().fetchFilterCounts();
   },
 
   importReviewMd: async (bookId, path) => {
     const review = await invoke<Review>("import_review_md", { bookId, path });
     set((s) => ({ reviews: [review, ...s.reviews] }));
+    get().patchBook(bookId, {
+      review_count: (get().books.find((b) => b.id === bookId)?.review_count ?? 0) + 1,
+    });
+    get().fetchFilterCounts();
     return review;
   },
 }));

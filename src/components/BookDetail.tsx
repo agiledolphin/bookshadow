@@ -22,9 +22,10 @@ interface Props {
   onClose: () => void;
   onPrev: (() => void) | null;
   onNext: (() => void) | null;
+  openToReviews?: boolean;
 }
 
-export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
+export function BookDetail({ book, onClose, onPrev, onNext, openToReviews }: Props) {
   // View state
   const [descExpanded, setDescExpanded] = useState(false);
 
@@ -471,18 +472,19 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
                   </FormField>
                 </div>
 
-                <FormField label="丛书">
-                  <input
-                    value={form.series ?? ""}
-                    onChange={e => set("series", e.target.value || undefined)}
-                    placeholder="丛书或系列名"
-                    className={inputCls}
-                  />
-                </FormField>
-
-                <FormField label="封面图片 URL">
-                  <input value={form.cover_url ?? ""} onChange={e => set("cover_url", e.target.value)} className={inputCls} />
-                </FormField>
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField label="丛书">
+                    <input
+                      value={form.series ?? ""}
+                      onChange={e => set("series", e.target.value || undefined)}
+                      placeholder="丛书或系列名"
+                      className={inputCls}
+                    />
+                  </FormField>
+                  <FormField label="封面图片 URL">
+                    <input value={form.cover_url ?? ""} onChange={e => set("cover_url", e.target.value)} className={inputCls} />
+                  </FormField>
+                </div>
 
                 <FormField label="简介">
                   <textarea
@@ -577,7 +579,11 @@ export function BookDetail({ book, onClose, onPrev, onNext }: Props) {
 
           {!editMode && (
             <div className="border-t">
-              <ReviewEditor bookId={book.id} />
+              <ReviewEditor
+                bookId={book.id}
+                defaultExpanded={openToReviews ?? false}
+                reviewCount={book.review_count ?? 0}
+              />
             </div>
           )}
         </div>

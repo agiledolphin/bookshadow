@@ -10,11 +10,12 @@ function localCoverSrc(path: string, nonce?: number): string {
 interface Props {
   book: Book;
   onClick: () => void;
+  onOpenReviews: () => void;
   onDelete: () => void;
   onMarkPurchased: () => void;
 }
 
-export function BookCard({ book, onClick, onDelete, onMarkPurchased }: Props) {
+export function BookCard({ book, onClick, onOpenReviews, onDelete, onMarkPurchased }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -126,6 +127,18 @@ export function BookCard({ book, onClick, onDelete, onMarkPurchased }: Props) {
           )}
           {book.pub_date && (
             <span className="text-xs text-gray-400 shrink-0">{book.pub_date.slice(0, 4)}</span>
+          )}
+          {(book.review_count ?? 0) > 0 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onOpenReviews(); }}
+              title="查看书评"
+              className="flex items-center gap-0.5 text-xs text-gray-500 bg-gray-100 hover:bg-gray-200 px-1.5 py-0.5 rounded-full transition-colors cursor-pointer shrink-0"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              {book.review_count}
+            </button>
           )}
           {/* action icons — visible on hover */}
           <div className={`ml-auto shrink-0 flex gap-1 transition-opacity ${confirming ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>

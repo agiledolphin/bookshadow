@@ -40,6 +40,7 @@ pub struct Book {
     pub series: Option<String>,
     pub douban_rating: Option<f64>,
     pub goodreads_rating: Option<f64>,
+    pub review_count: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -101,6 +102,7 @@ pub struct BookFilters {
     pub limit: Option<i64>,
     pub offset: Option<i64>,
     pub sort_by: Option<String>,
+    pub has_review: Option<bool>,
 }
 
 pub fn resolve_order_by(sort_by: Option<&str>) -> &'static str {
@@ -115,7 +117,7 @@ pub fn resolve_order_by(sort_by: Option<&str>) -> &'static str {
 }
 
 pub const SELECT_COLS: &str =
-    "id,title,author,isbn,publisher,pub_date,language,region,category,tags,rating,cover_url,cover_local,description,translator,created_at,updated_at,status,started_at,finished_at,series,douban_rating,goodreads_rating";
+    "id,title,author,isbn,publisher,pub_date,language,region,category,tags,rating,cover_url,cover_local,description,translator,created_at,updated_at,status,started_at,finished_at,series,douban_rating,goodreads_rating,(SELECT COUNT(*) FROM reviews WHERE reviews.book_id=books.id) as review_count";
 
 pub fn row_to_book(row: &rusqlite::Row<'_>) -> rusqlite::Result<Book> {
     Ok(Book {
@@ -142,6 +144,7 @@ pub fn row_to_book(row: &rusqlite::Row<'_>) -> rusqlite::Result<Book> {
         series: row.get(20)?,
         douban_rating: row.get(21)?,
         goodreads_rating: row.get(22)?,
+        review_count: row.get(23)?,
     })
 }
 
@@ -192,6 +195,9 @@ pub fn get_books(
         conditions.push(format!("substr(pub_date,1,4) >= ?{} AND substr(pub_date,1,4) <= ?{}", param_values.len() + 1, param_values.len() + 2));
         param_values.push(Box::new(from));
         param_values.push(Box::new(to));
+    }
+    if let Some(true) = f.has_review {
+        conditions.push("EXISTS (SELECT 1 FROM reviews WHERE reviews.book_id = books.id)".to_string());
     }
 
     let where_clause = if conditions.is_empty() {

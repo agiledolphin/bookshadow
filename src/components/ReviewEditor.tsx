@@ -10,12 +10,15 @@ import { renderMarkdown } from "../utils/markdown";
 
 interface Props {
   bookId: number;
+  defaultExpanded?: boolean;
+  reviewCount?: number;
 }
 
-export function ReviewEditor({ bookId }: Props) {
+export function ReviewEditor({ bookId, defaultExpanded = false, reviewCount = 0 }: Props) {
   const { reviews, fetchReviews, createReview, updateReview, deleteReview, importReviewMd } =
     useBookStore();
   const { addToast } = useToastStore();
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [newContent, setNewContent] = useState("");
   const [showNew, setShowNew] = useState(false);
@@ -24,8 +27,12 @@ export function ReviewEditor({ bookId }: Props) {
   const viewRef = useRef<EditorView | null>(null);
 
   useEffect(() => {
-    fetchReviews(bookId);
-  }, [bookId]);
+    setExpanded(defaultExpanded);
+  }, [defaultExpanded, bookId]);
+
+  useEffect(() => {
+    if (expanded) fetchReviews(bookId);
+  }, [expanded, bookId]);
 
   useEffect(() => {
     if (showNew && editorRef.current && !viewRef.current) {
@@ -88,31 +95,42 @@ export function ReviewEditor({ bookId }: Props) {
 
   return (
     <div>
-      <div className="sticky top-0 z-10 bg-white flex items-center justify-between px-5 py-3 border-b border-gray-100">
-        <h3 className="font-semibold text-gray-800">书评 ({reviews.length})</h3>
-        <div className="flex gap-1">
-          <button
-            onClick={handleImport}
-            title="导入书评"
-            className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-          </button>
-          <button
-            onClick={() => setShowNew(true)}
-            title="写书评"
-            className="p-1.5 rounded text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors cursor-pointer"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-          </button>
-        </div>
+      <div className="flex items-center px-5 py-3">
+        <button
+          onClick={() => setExpanded(v => !v)}
+          className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors cursor-pointer flex-1"
+        >
+          <span className="font-medium">书评</span>
+          {reviewCount > 0 && <span className="text-xs text-gray-400">{reviewCount} 篇</span>}
+          <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ml-0.5 ${expanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {expanded && (
+          <div className="flex gap-1 shrink-0">
+            <button
+              onClick={handleImport}
+              title="导入书评"
+              className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setShowNew(true)}
+              title="写书评"
+              className="p-1.5 rounded text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors cursor-pointer"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
 
-      <div className="flex flex-col gap-4 px-5 py-4">
+      {expanded && <div className="flex flex-col gap-4 px-5 py-4 border-t border-gray-100">
       {showNew && (
         <div className="border border-gray-200 rounded-xl overflow-hidden">
           <EditPreviewTabs preview={newPreview} onToggle={setNewPreview} />
@@ -155,7 +173,7 @@ export function ReviewEditor({ bookId }: Props) {
           onError={addToast}
         />
       ))}
-      </div>
+      </div>}
     </div>
   );
 

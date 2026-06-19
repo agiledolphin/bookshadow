@@ -469,6 +469,19 @@ CREATE VIRTUAL TABLE books_fts USING fts5(
 - [x] `BookForm`：星级选择器右侧内联显示参考评分，逻辑与 BookDetail 相同
 - [x] 个人星级不再自动填写（移除两处 `rating: meta.rating ?? f.rating`）
 
+### Phase 23：书评体验完善 ✅（v0.9.3）
+
+**目标**：书评系统可视化增强，减少 UI 翻页，完善数据导出。
+
+- [x] **BookForm 布局优化**：取消/保存按钮移至标题栏 header；AI 建议+星级合并为一行；丛书+封面 URL 合并为 2 列；简介高度缩为 3 行；整体减少翻页
+- [x] **BookDetail 编辑模式**：丛书+封面 URL 合并为 2 列 grid，与 BookForm 保持一致
+- [x] **书评角标**：书卡/列表行有书评时显示低调 pill 角标（铅笔图标 + 数量）；点击角标直接打开详情且书评区展开；点击书卡正文打开详情时书评区默认收缩
+- [x] **书评折叠/展开**：ReviewEditor 整合折叠 toggle + 导入/写书评按钮为单行 header，展开时才显示操作按钮；默认收缩，通过 `defaultExpanded` prop 控制初始状态
+- [x] **「有书评」筛选**：FilterPanel 新增「书评」分组，固定位于「状态」之后；`has_review` 过滤条件复用 `build_where` 排除自身机制，联动计数正确反映当前其他筛选维度
+- [x] **review_count 字段**：`SELECT_COLS` 追加关联子查询（索引 23）；书评增删后通过 `patchBook` 实时更新书卡角标，同时调用 `fetchFilterCounts` 刷新侧边栏计数
+- [x] **CSV 导出补全**：新增 tags、series、started_at、finished_at、updated_at、douban_rating、goodreads_rating、review_count 共 8 列，与 JSON 导出字段对齐（共 24 列）
+- [x] **导入书评图标修正**：由 upload 箭头（向上）改为 download 箭头（向下），语义准确
+
 ---
 
 ## 七、关键设计决策

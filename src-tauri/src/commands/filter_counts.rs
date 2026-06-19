@@ -16,6 +16,7 @@ pub struct FilterCounts {
     pub rating: HashMap<i32, i64>,
     pub decade: HashMap<i32, i64>,
     pub tag: HashMap<String, i64>,
+    pub has_review: i64,
 }
 
 /// Build WHERE clause + owned params, excluding one sidebar dimension.
@@ -82,6 +83,11 @@ fn build_where(f: &BookFilters, exclude: &str) -> (String, Vec<Box<dyn ToSql>>) 
             let escaped = v.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
             conds.push(format!("tags LIKE ?{} ESCAPE '\\'", params.len() + 1));
             params.push(Box::new(format!("%\"{}\"%" , escaped)));
+        }
+    }
+    if exclude != "has_review" {
+        if let Some(true) = f.has_review {
+            conds.push("EXISTS (SELECT 1 FROM reviews WHERE reviews.book_id = books.id)".to_string());
         }
     }
     if exclude != "decade" {
@@ -263,5 +269,17 @@ pub fn get_filter_counts(
     let decade   = decade_group(&conn, &f)?;
     let tag      = tag_group(&conn, &f)?;
 
-    Ok(FilterCounts { total, status, region, category, language, rating, decade, tag })
+    let has_review: i64 = {
+        let (w, owned) = build_where(&f, "has_review");
+        let exists = "EXISTS (SELECT 1 FROM reviews WHERE reviews.book_id = books.id)";
+        let sql = if w.is_empty() {
+            format!("SELECT COUNT(*) FROM books WHERE {exists}")
+        } else {
+            format!("SELECT COUNT(*) FROM books {} AND {exists}", w)
+        };
+        let refs: Vec<&dyn ToSql> = owned.iter().map(|p| p.as_ref()).collect();
+        conn.query_row(&sql, refs.as_slice(), |r| r.get(0)).unwrap_or(0)
+    };
+
+    Ok(FilterCounts { total, status, region, category, language, rating, decade, tag, has_review })
 }

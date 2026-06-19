@@ -22,6 +22,7 @@ export interface Book {
   series?: string;
   douban_rating?: number;
   goodreads_rating?: number;
+  review_count?: number;
 }
 
 export interface Review {
@@ -63,6 +64,7 @@ export interface BookFilters {
   limit?: number;
   offset?: number;
   sort_by?: string;
+  has_review?: boolean;
 }
 
 export interface CreateBook {
@@ -113,6 +115,7 @@ export interface FilterCounts {
   rating: Record<string, number>;
   decade: Record<string, number>;
   tag: Record<string, number>;
+  has_review: number;
 }
 
 export interface BookRecommendation {

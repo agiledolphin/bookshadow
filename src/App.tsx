@@ -18,6 +18,7 @@ export default function App() {
   const { books, filters, viewMode, stats, loading, hasMore, isLoadingMore, fetchBooks, loadMoreBooks, setSearchQuery, setFilters, setViewMode, setSortBy, deleteBook, updateBook, recommendations, recommendationsLoading, fetchRecommendations, clearRecommendations } = useBookStore();
   const { addToast } = useToastStore();
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+  const [openToReviews, setOpenToReviews] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showBatchImport, setShowBatchImport] = useState(false);
@@ -305,9 +306,9 @@ export default function App() {
               <span className="text-sm">加载中…</span>
             </div>
           ) : viewMode === "grid" ? (
-            <BookGrid books={displayBooks} hasMore={hasMore} isLoadingMore={isLoadingMore} onSelect={setSelectedBook} onDelete={handleDelete} onMarkPurchased={handleMarkWant} onLoadMore={loadMoreBooks} />
+            <BookGrid books={displayBooks} hasMore={hasMore} isLoadingMore={isLoadingMore} onSelect={setSelectedBook} onOpenReviews={(b) => { setSelectedBook(b); setOpenToReviews(true); }} onDelete={handleDelete} onMarkPurchased={handleMarkWant} onLoadMore={loadMoreBooks} />
           ) : (
-            <BookList books={displayBooks} hasMore={hasMore} isLoadingMore={isLoadingMore} onSelect={setSelectedBook} onDelete={handleDelete} onMarkPurchased={handleMarkWant} onLoadMore={loadMoreBooks} />
+            <BookList books={displayBooks} hasMore={hasMore} isLoadingMore={isLoadingMore} onSelect={setSelectedBook} onOpenReviews={(b) => { setSelectedBook(b); setOpenToReviews(true); }} onDelete={handleDelete} onMarkPurchased={handleMarkWant} onLoadMore={loadMoreBooks} />
           )}
         </main>
       </div>
@@ -317,9 +318,10 @@ export default function App() {
         return (
           <BookDetail
             book={selectedBook}
-            onClose={() => setSelectedBook(null)}
-            onPrev={idx > 0 ? () => setSelectedBook(books[idx - 1]) : null}
-            onNext={idx < books.length - 1 ? () => setSelectedBook(books[idx + 1]) : null}
+            onClose={() => { setSelectedBook(null); setOpenToReviews(false); }}
+            onPrev={idx > 0 ? () => { setSelectedBook(books[idx - 1]); setOpenToReviews(false); } : null}
+            onNext={idx < books.length - 1 ? () => { setSelectedBook(books[idx + 1]); setOpenToReviews(false); } : null}
+            openToReviews={openToReviews}
           />
         );
       })()}

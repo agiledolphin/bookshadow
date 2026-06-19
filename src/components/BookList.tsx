@@ -6,12 +6,13 @@ interface Props {
   hasMore: boolean;
   isLoadingMore: boolean;
   onSelect: (book: Book) => void;
+  onOpenReviews: (book: Book) => void;
   onDelete: (book: Book) => void;
   onMarkPurchased: (book: Book) => void;
   onLoadMore: () => void;
 }
 
-export function BookList({ books, hasMore, isLoadingMore, onSelect, onDelete, onMarkPurchased, onLoadMore }: Props) {
+export function BookList({ books, hasMore, isLoadingMore, onSelect, onOpenReviews, onDelete, onMarkPurchased, onLoadMore }: Props) {
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -74,6 +75,18 @@ export function BookList({ books, hasMore, isLoadingMore, onSelect, onDelete, on
                 <p className="text-amber-400 text-xs">{"★".repeat(book.rating)}</p>
               )}
               <p className="text-xs text-gray-400">{book.pub_date ?? ""}</p>
+              {(book.review_count ?? 0) > 0 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onOpenReviews(book); }}
+                  title="查看书评"
+                  className="flex items-center gap-0.5 text-xs text-gray-500 bg-gray-100 hover:bg-gray-200 px-1.5 py-0.5 rounded-full transition-colors cursor-pointer ml-auto"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  {book.review_count}
+                </button>
+              )}
             </div>
             <div className="text-right shrink-0 hidden sm:block">
               <p className="text-xs text-gray-400">{book.category ?? ""}</p>

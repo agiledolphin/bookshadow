@@ -7,15 +7,15 @@ export function FilterPanel() {
   const [otherOpen, setOtherOpen] = useState(false);
   const [otherCategoryOpen, setOtherCategoryOpen] = useState(false);
 
-  const SIDEBAR_KEYS = ["status", "rating", "region", "category", "decade", "language", "tag"] as const;
-  const update = (key: string, value: string | number | undefined) => {
+  const SIDEBAR_KEYS = ["status", "rating", "region", "category", "decade", "language", "tag", "has_review"] as const;
+  const update = (key: string, value: string | number | boolean | undefined) => {
     setFilters({ ...filters, [key]: value });
   };
   const clear = () => setFilters({ search_query: filters.search_query, sort_by: filters.sort_by });
   const hasFilters = SIDEBAR_KEYS.some((k) => filters[k] !== undefined);
 
   const counts = filterCounts ?? {
-    total: 0, status: {}, region: {}, category: {}, language: {}, rating: {}, decade: {}, tag: {},
+    total: 0, status: {}, region: {}, category: {}, language: {}, rating: {}, decade: {}, tag: {}, has_review: 0,
   };
 
   const decades = useMemo(
@@ -77,6 +77,18 @@ export function FilterPanel() {
           </GroupItem>
         ))}
       </FilterGroup>
+
+      {counts.has_review > 0 && (
+        <FilterGroup label="书评">
+          <GroupItem
+            active={filters.has_review === true}
+            count={counts.has_review}
+            onClick={() => update("has_review", filters.has_review ? undefined : true)}
+          >
+            有书评
+          </GroupItem>
+        </FilterGroup>
+      )}
 
       <FilterGroup label="星级">
         {[...RATINGS].reverse().map((r) => (

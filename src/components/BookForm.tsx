@@ -170,8 +170,23 @@ export function BookForm({ book, onClose }: Props) {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl flex flex-col max-h-[90vh]">
         {/* 固定标题栏 */}
-        <div className="flex items-center justify-between px-5 py-3 border-b shrink-0">
-          <h2 className="text-base font-semibold">{book ? "编辑书籍" : "新增书籍"}</h2>
+        <div className="flex items-center gap-3 px-5 py-3 border-b shrink-0">
+          <h2 className="text-base font-semibold flex-1">{book ? "编辑书籍" : "新增书籍"}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 cursor-pointer"
+          >
+            取消
+          </button>
+          <button
+            type="submit"
+            form="book-form"
+            disabled={saving}
+            className="bg-blue-500 text-white px-5 py-1.5 rounded-lg text-sm hover:bg-blue-600 disabled:opacity-50 cursor-pointer"
+          >
+            {saving ? "保存中…" : "保存"}
+          </button>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none cursor-pointer">×</button>
         </div>
 
@@ -295,19 +310,6 @@ export function BookForm({ book, onClose }: Props) {
             </Field>
           </div>
 
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={handleSuggest}
-              disabled={suggestingMeta}
-              className="flex items-center gap-1 px-2.5 py-1 text-xs text-purple-600 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-              </svg>
-              {suggestingMeta ? "AI 分析中…" : "AI 建议类别/地域/标签"}
-            </button>
-          </div>
           {suggestion && (
             <AiSuggestionPanel
               suggestion={suggestion}
@@ -321,8 +323,9 @@ export function BookForm({ book, onClose }: Props) {
             />
           )}
 
-          <Field label="星级">
+          <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
+              <span className="text-xs font-medium text-gray-600">星级</span>
               <StarRating value={form.rating ?? 0} onChange={(v) => set("rating", v)} />
               {(form.douban_rating != null || form.goodreads_rating != null) && (
                 <span className="text-xs text-gray-400 flex gap-2">
@@ -335,7 +338,18 @@ export function BookForm({ book, onClose }: Props) {
                 </span>
               )}
             </div>
-          </Field>
+            <button
+              type="button"
+              onClick={handleSuggest}
+              disabled={suggestingMeta}
+              className="flex items-center gap-1 px-2.5 py-1 text-xs text-purple-600 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              {suggestingMeta ? "AI 分析中…" : "AI 建议类别/地域/标签"}
+            </button>
+          </div>
 
           <div className="grid grid-cols-3 gap-3">
             <Field label="阅读状态">
@@ -367,26 +381,27 @@ export function BookForm({ book, onClose }: Props) {
             </Field>
           </div>
 
-          <Field label="丛书">
-            <input
-              value={form.series ?? ""}
-              onChange={(e) => set("series", e.target.value || undefined)}
-              placeholder="丛书或系列名"
-              className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
-          </Field>
-
-          <Field label="封面图片 URL">
-            <input
-              value={form.cover_url ?? ""}
-              onChange={(e) => set("cover_url", e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
-          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="丛书">
+              <input
+                value={form.series ?? ""}
+                onChange={(e) => set("series", e.target.value || undefined)}
+                placeholder="丛书或系列名"
+                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </Field>
+            <Field label="封面图片 URL">
+              <input
+                value={form.cover_url ?? ""}
+                onChange={(e) => set("cover_url", e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </Field>
+          </div>
 
           <Field label="简介">
             <textarea
-              rows={2}
+              rows={3}
               value={form.description ?? ""}
               onChange={(e) => set("description", e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
@@ -398,27 +413,6 @@ export function BookForm({ book, onClose }: Props) {
           </Field>
         </form>
 
-        {/* 固定底部按钮 */}
-        <div className="flex items-center justify-between px-5 py-3 border-t shrink-0">
-          <span className="flex-1" />
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-1.5 text-sm text-gray-600 hover:text-gray-800 cursor-pointer"
-            >
-              取消
-            </button>
-            <button
-              type="submit"
-              form="book-form"
-              disabled={saving}
-              className="bg-blue-500 text-white px-6 py-1.5 rounded-lg text-sm hover:bg-blue-600 disabled:opacity-50 cursor-pointer"
-            >
-              {saving ? "保存中…" : "保存"}
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

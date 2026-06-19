@@ -28,10 +28,10 @@ pub fn export_books(state: State<'_, DbState>, path: String, format: String) -> 
         }
         "csv" => {
             let mut lines = Vec::with_capacity(books.len() + 1);
-            lines.push("id,title,author,translator,isbn,publisher,pub_date,language,region,category,rating,status,description,created_at".to_string());
+            lines.push("id,title,author,translator,isbn,publisher,pub_date,language,region,category,tags,rating,cover_url,cover_local,description,series,status,started_at,finished_at,douban_rating,goodreads_rating,review_count,created_at,updated_at".to_string());
             for b in &books {
                 lines.push(format!(
-                    "{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+                    "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
                     b.id,
                     csv_field(&b.title),
                     csv_field(b.author.as_deref().unwrap_or("")),
@@ -42,10 +42,20 @@ pub fn export_books(state: State<'_, DbState>, path: String, format: String) -> 
                     csv_field(b.language.as_deref().unwrap_or("")),
                     csv_field(b.region.as_deref().unwrap_or("")),
                     csv_field(b.category.as_deref().unwrap_or("")),
+                    csv_field(b.tags.as_deref().unwrap_or("")),
                     b.rating.map(|r| r.to_string()).unwrap_or_default(),
-                    csv_field(b.status.as_deref().unwrap_or("")),
+                    csv_field(b.cover_url.as_deref().unwrap_or("")),
+                    csv_field(b.cover_local.as_deref().unwrap_or("")),
                     csv_field(b.description.as_deref().unwrap_or("")),
+                    csv_field(b.series.as_deref().unwrap_or("")),
+                    csv_field(b.status.as_deref().unwrap_or("")),
+                    csv_field(b.started_at.as_deref().unwrap_or("")),
+                    csv_field(b.finished_at.as_deref().unwrap_or("")),
+                    b.douban_rating.map(|r| format!("{:.1}", r)).unwrap_or_default(),
+                    b.goodreads_rating.map(|r| format!("{:.2}", r)).unwrap_or_default(),
+                    b.review_count,
                     csv_field(&b.created_at),
+                    csv_field(&b.updated_at),
                 ));
             }
             std::fs::write(&path, lines.join("\r\n")).map_err(|e| e.to_string())?;
