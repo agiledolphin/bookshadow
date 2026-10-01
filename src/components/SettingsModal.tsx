@@ -3,7 +3,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { save } from "@tauri-apps/plugin-dialog";
 import { useToastStore } from "../stores/toastStore";
-import { useRatingsRefreshStore } from "../stores/ratingsRefreshStore";
 
 interface AppConfig {
   google_books_api_key?: string;
@@ -25,9 +24,7 @@ export function SettingsModal({ onClose }: Props) {
   const [showCookie, setShowCookie] = useState(false);
   const [showAnthropicKey, setShowAnthropicKey] = useState(false);
   const [loggingIn, setLoggingIn] = useState(false);
-  const [refetchAll, setRefetchAll] = useState(false);
   const { addToast } = useToastStore();
-  const ratings = useRatingsRefreshStore();
 
   useEffect(() => {
     invoke<AppConfig>("get_config").then(setConfig).catch(() => {});
@@ -229,51 +226,6 @@ export function SettingsModal({ onClose }: Props) {
               placeholder="模型名称（留空用 claude-sonnet-4-6）"
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 font-mono"
             />
-          </div>
-
-          <div className="border-t border-gray-100 pt-5 flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-gray-700">社区评分回填</label>
-            {ratings.running ? (
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-blue-500 transition-all"
-                      style={{ width: ratings.progress ? `${(ratings.progress.done / ratings.progress.total) * 100}%` : "0%" }}
-                    />
-                  </div>
-                  <span className="text-xs text-gray-500 tabular-nums shrink-0">
-                    {ratings.progress ? `${ratings.progress.done}/${ratings.progress.total}` : "准备中…"}
-                  </span>
-                  <button
-                    onClick={ratings.cancel}
-                    disabled={ratings.cancelling}
-                    className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-60 transition-colors cursor-pointer"
-                  >
-                    {ratings.cancelling ? "取消中…" : "取消"}
-                  </button>
-                </div>
-                {ratings.progress && (
-                  <p className="text-xs text-gray-400 truncate">
-                    已更新 {ratings.progress.updated} 本 · {ratings.progress.title}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => ratings.start(!refetchAll)}
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
-                >
-                  {refetchAll ? "重新获取全部评分" : "回填缺失评分"}
-                </button>
-                <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
-                  <input type="checkbox" checked={refetchAll} onChange={(e) => setRefetchAll(e.target.checked)} />
-                  包含已有评分
-                </label>
-              </div>
-            )}
-            <p className="text-xs text-gray-400">按 ISBN 从豆瓣与 Goodreads 获取社区评分，每本约 1.5 秒，可关闭设置在后台运行。</p>
           </div>
 
           <div className="border-t border-gray-100 pt-5 flex flex-col gap-1.5">

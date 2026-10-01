@@ -116,7 +116,6 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(DbState(Mutex::new(conn)))
-        .manage(commands::ratings::RatingsRefreshState::default())
         .invoke_handler(tauri::generate_handler![
             fetch_by_isbn,
             commands::batch_import::scan_isbn_image,
@@ -146,8 +145,6 @@ pub fn run() {
             commands::llm::suggest_metadata,
             commands::llm::discover_books,
             commands::llm::enrich_book,
-            commands::ratings::refresh_community_ratings,
-            commands::ratings::cancel_refresh_ratings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

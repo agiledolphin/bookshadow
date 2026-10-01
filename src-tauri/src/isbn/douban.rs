@@ -1,4 +1,4 @@
-use super::BookMeta;
+use super::{BookMeta, SourceError};
 use anyhow::Result;
 use scraper::{Html, Selector};
 use std::collections::HashMap;
@@ -50,23 +50,29 @@ pub async fn fetch(isbn_or_url: &str, cookie: Option<&str>) -> Result<BookMeta> 
     }
     let resp = req.send().await?;
 
+    let final_url = resp.url().as_str();
+    // 反爬验证页（sec.douban.com）
+    if final_url.contains("sec.douban.com") {
+        return Err(SourceError::Blocked("豆瓣请求被反爬验证拦截".into()).into());
+    }
     // 有 Cookie 时检测是否被重定向到登录页（Cookie 失效的典型表现）
-    if has_cookie {
-        let final_url = resp.url().as_str();
-        if final_url.contains("accounts.douban.com") || final_url.contains("/login") {
-            anyhow::bail!("豆瓣 Cookie 已失效，请在设置中更新 Cookie");
-        }
+    if has_cookie && (final_url.contains("accounts.douban.com") || final_url.contains("/login")) {
+        return Err(SourceError::CookieExpired.into());
     }
 
-    if !resp.status().is_success() {
+    let status = resp.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
         return Ok(BookMeta::default());
+    }
+    if !status.is_success() {
+        return Err(SourceError::Blocked(format!("豆瓣请求被拦截（HTTP {}）", status.as_u16())).into());
     }
 
     let html = resp.text().await?;
 
-    // 二次检查：HTML 明确包含登录跳转标记
+    // 二次检查：页面为未登录状态（导航栏出现登录链接）
     if has_cookie && html.contains("accounts.douban.com/passport/login") {
-        anyhow::bail!("豆瓣 Cookie 已失效，请在设置中更新 Cookie");
+        return Err(SourceError::CookieExpired.into());
     }
     let doc = Html::parse_document(&html);
 

@@ -25,6 +25,29 @@ pub struct BookMeta {
     pub goodreads_rating: Option<f64>,
 }
 
+/// 来源站点的可识别失败类型；其余错误仍为普通 anyhow 错误。
+/// 通过 `err.downcast_ref::<SourceError>()` 判断，Display 文案保持面向用户。
+#[derive(Debug)]
+pub enum SourceError {
+    /// 豆瓣 Cookie 已失效（被重定向到登录页 / 页面为未登录状态）
+    CookieExpired,
+    /// 被反爬拦截（HTTP 202/403/429、验证页等），稍后重试可能恢复
+    Blocked(String),
+    /// 站点没有这本书
+    NotFound(String),
+}
+
+impl std::fmt::Display for SourceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SourceError::CookieExpired => write!(f, "豆瓣 Cookie 已失效，请在设置中更新 Cookie"),
+            SourceError::Blocked(m) | SourceError::NotFound(m) => write!(f, "{}", m),
+        }
+    }
+}
+
+impl std::error::Error for SourceError {}
+
 /// Normalize various date strings to ISO format: "YYYY", "YYYY-MM", or "YYYY-MM-DD".
 /// Handles dash-separated numeric dates and English month-name formats.
 pub fn normalize_date(s: &str) -> Option<String> {
@@ -184,7 +207,7 @@ pub async fn fetch_by_isbn(isbn: &str, source: Option<&str>, google_api_key: Opt
                     }
                     return Ok(meta);
                 }
-                Err(e) if e.to_string().contains("Cookie 已失效") => return Err(e),
+                Err(e) if matches!(e.downcast_ref::<SourceError>(), Some(SourceError::CookieExpired)) => return Err(e),
                 _ => {}
             }
             if let Ok(meta) = google_books::fetch(isbn, google_api_key).await {
