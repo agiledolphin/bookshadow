@@ -14,8 +14,8 @@ npm run tauri dev
 # Type-check frontend
 npx tsc --noEmit
 
-# Build release app
-npm run tauri build
+# Build release app (universal binary: arm64 + x86_64) — always use this for releases
+npm run tauri:build
 
 # Build frontend only
 npm run build
