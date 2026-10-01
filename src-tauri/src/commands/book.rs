@@ -243,6 +243,10 @@ pub fn get_book(state: State<'_, DbState>, id: i64) -> Result<Book, String> {
 #[tauri::command]
 pub fn create_book(state: State<'_, DbState>, mut payload: CreateBook) -> Result<Book, String> {
     payload.isbn = sanitize_isbn(payload.isbn);
+    // 状态不允许为空（「未设」已并入「想读」）
+    if payload.status.as_deref().map_or(true, |s| s.trim().is_empty()) {
+        payload.status = Some("want".into());
+    }
     let conn = state.0.lock().map_err(|e| e.to_string())?;
 
     if let Some(ref isbn) = payload.isbn {
@@ -321,8 +325,8 @@ pub fn update_book(
     push_field!(payload.series,           "series");
     push_field!(payload.douban_rating,    "douban_rating");
     push_field!(payload.goodreads_rating, "goodreads_rating");
-    if let Some(v) = payload.status {
-        sets.push(format!("status=nullif(?{},'')", param_values.len() + 1));
+    if let Some(v) = payload.status.filter(|s| !s.trim().is_empty()) {
+        sets.push(format!("status=?{}", param_values.len() + 1));
         param_values.push(Box::new(v));
     }
     sets.push(format!("started_at=nullif(?{},'')", param_values.len() + 1));
@@ -376,6 +380,9 @@ pub async fn download_cover(
     url: String,
     isbn: Option<String>,
 ) -> Result<String, String> {
+    if crate::isbn::douban::is_placeholder_cover(&url) {
+        return Err("豆瓣无封面（默认占位图）".into());
+    }
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
         .build()
@@ -393,6 +400,17 @@ pub async fn download_cover(
     }
 
     let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+
+    // 拒绝占位图（如 Open Library 未命中时返回的 1×1 空白图）；无法识别的格式不拦截
+    let dims = image::ImageReader::new(std::io::Cursor::new(&bytes))
+        .with_guessed_format()
+        .ok()
+        .and_then(|r| r.into_dimensions().ok());
+    if let Some((w, h)) = dims {
+        if w < 50 || h < 50 {
+            return Err(format!("封面下载失败：图片过小（{}×{}），可能是占位图", w, h));
+        }
+    }
 
     let ext = if url.ends_with(".png") { "png" } else { "jpg" };
     let stem = match sanitize_isbn(isbn) {

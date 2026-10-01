@@ -36,9 +36,10 @@ Frontend invokes Tauri commands via `invoke()` → Rust handlers in `src-tauri/s
 
 ### Rust modules (`src-tauri/src/`)
 - `lib.rs` — Tauri builder, registers all commands, initializes DB
-- `db/mod.rs` — `init_db()` opens `~/.bookshadow/sqlite/bookshadow.db`, runs migrations; `db/schema.rs` — DDL + migration (ALTER TABLE for new columns)
+- `db/mod.rs` — `init_db()` opens `~/.bookshadow/sqlite/bookshadow.db`, runs migrations; `db/schema.rs` — versioned migrations tracked in `schema_migrations` table (append-only `MIGRATIONS` list; never edit a released step; use `add_column_if_missing` for new columns)
 - `commands/book.rs` — CRUD for books; `pub const SELECT_COLS` shared with search
 - `commands/review.rs` — CRUD for reviews + `.md` import via `tauri-plugin-dialog`
+- `commands/ratings.rs` — batch backfill of douban/goodreads community ratings (progress event `ratings_refresh_progress`, cancellable)
 - `commands/search.rs` — FTS5 full-text search; uses `pub SELECT_COLS` from `book.rs`
 - `isbn/mod.rs` — `BookMeta` struct + cascade: Douban → Google Books → Open Library
 - `isbn/douban.rs` — HTML scraping of `book.douban.com/isbn/{isbn}/`; handles `\u{a0}` nbsp and standalone ":" tokens in `#info`; parses `[国籍]` prefix from author → clean name + region

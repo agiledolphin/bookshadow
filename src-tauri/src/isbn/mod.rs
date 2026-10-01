@@ -157,6 +157,14 @@ pub async fn discover_search(
     }
 }
 
+/// 豆瓣无封面时，从 Google Books / Open Library 补封面
+async fn fallback_cover(isbn: &str, google_api_key: Option<&str>) -> Option<String> {
+    if let Ok(meta) = google_books::fetch(isbn, google_api_key).await {
+        if meta.cover_url.is_some() { return meta.cover_url; }
+    }
+    open_library::fetch(isbn).await.ok().and_then(|m| m.cover_url)
+}
+
 pub async fn fetch_by_isbn(isbn: &str, source: Option<&str>, google_api_key: Option<&str>, douban_cookie: Option<&str>) -> Result<BookMeta> {
     let has_data = |meta: &BookMeta| meta.title.is_some() || meta.publisher.is_some() || meta.isbn.is_some();
     let fetch_single = |meta: BookMeta, name: &str| -> Result<BookMeta> {
@@ -170,7 +178,12 @@ pub async fn fetch_by_isbn(isbn: &str, source: Option<&str>, google_api_key: Opt
         Some("openlibrary") => fetch_single(open_library::fetch(isbn).await?, "Open Library"),
         _ => {
             match douban::fetch(isbn, douban_cookie).await {
-                Ok(meta) if has_data(&meta) => return Ok(meta),
+                Ok(mut meta) if has_data(&meta) => {
+                    if meta.cover_url.is_none() {
+                        meta.cover_url = fallback_cover(isbn, google_api_key).await;
+                    }
+                    return Ok(meta);
+                }
                 Err(e) if e.to_string().contains("Cookie 已失效") => return Err(e),
                 _ => {}
             }

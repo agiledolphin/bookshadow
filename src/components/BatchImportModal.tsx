@@ -367,9 +367,12 @@ export function BatchImportModal({ onClose }: { onClose: () => void }) {
             cover_url: row.meta!.cover_url ?? null,
             description: row.meta!.description ?? null,
             translator: row.meta!.translator ?? null,
+            series: row.meta!.series ?? null,
             tags: "[]",
             rating: row.meta!.rating ?? null,
-            status: null,
+            douban_rating: row.meta!.douban_rating ?? null,
+            goodreads_rating: row.meta!.goodreads_rating ?? null,
+            status: "want",
           },
         });
         if (book.cover_url && !book.cover_local) {

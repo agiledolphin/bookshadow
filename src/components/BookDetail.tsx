@@ -111,6 +111,8 @@ export function BookDetail({ book, onClose, onPrev, onNext, openToReviews }: Pro
         isbn: isbnInput.trim(),
         source: effectiveSource,
       });
+      // 手动上传的封面（有本地图、无 cover_url）不被获取结果覆盖
+      const hasUploadedCover = !!coverLocal && !book.cover_url;
       setForm(f => ({
         ...f,
         title: meta.title ?? f.title,
@@ -118,7 +120,7 @@ export function BookDetail({ book, onClose, onPrev, onNext, openToReviews }: Pro
         translator: meta.translator ?? f.translator,
         publisher: meta.publisher ?? f.publisher,
         pub_date: meta.pub_date ?? f.pub_date,
-        cover_url: meta.cover_url ?? f.cover_url,
+        cover_url: hasUploadedCover ? f.cover_url : (meta.cover_url ?? f.cover_url),
         description: meta.description ?? f.description,
         language: meta.language ?? f.language,
         region: meta.region ?? f.region,

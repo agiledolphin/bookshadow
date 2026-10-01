@@ -3,6 +3,7 @@ pub mod book;
 pub mod export;
 pub mod filter_counts;
 pub mod llm;
+pub mod ratings;
 pub mod review;
 pub mod settings;
 pub mod stats;

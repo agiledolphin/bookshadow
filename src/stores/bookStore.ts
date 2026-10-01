@@ -147,12 +147,15 @@ export const useBookStore = create<BookStore>((set, get) => ({
   },
 
   updateBook: async (id, payload) => {
+    const prev = get().books.find((b) => b.id === id) ?? get().selectedBook;
     const book = await invoke<Book>("update_book", { id, payload });
     set((s) => ({
       selectedBook: s.selectedBook?.id === id ? book : s.selectedBook,
     }));
     get().fetchBooks(true);
-    if (book.cover_url) {
+    // 仅在封面地址变化或本地尚无封面时下载，避免每次保存都重新下载
+    const coverChanged = book.cover_url !== (prev?.id === id ? prev.cover_url : undefined);
+    if (book.cover_url && (coverChanged || !book.cover_local)) {
       invoke<string>("download_cover", { id: book.id, url: book.cover_url, isbn: book.isbn ?? null })
         .then((localPath) => {
           set((s) => {

@@ -11,6 +11,11 @@ const SEL_INFO:   &str = "#info";
 const SEL_DESC:   &str = "#link-report .intro p, #link-report p";
 const SEL_RATING: &str = "strong[property='v:average']";
 
+/// 豆瓣无封面时返回的默认占位图（如 `.../book-static/pics/book-default-lpic.gif`）
+pub fn is_placeholder_cover(url: &str) -> bool {
+    url.contains("/book-default")
+}
+
 /// Resolve ISBN or Douban subject URL/ID to a fetchable URL.
 /// Accepts:
 ///   - ISBN string         → https://book.douban.com/isbn/{isbn}/
@@ -79,6 +84,7 @@ pub async fn fetch(isbn_or_url: &str, cookie: Option<&str>) -> Result<BookMeta> 
         .select(&cover_sel)
         .next()
         .and_then(|e| e.value().attr("src"))
+        .filter(|s| !is_placeholder_cover(s))
         .map(|s| s.to_string());
 
     // 解析 #info：收集所有非空文本节点，相邻的「标签:」和「值」成对出现
@@ -456,6 +462,7 @@ fn parse_new_books_html(html: &str) -> Vec<NewBookEntry> {
         let cover_url = item.select(&cover_sel)
             .next()
             .and_then(|img| img.value().attr("src"))
+            .filter(|s| !is_placeholder_cover(s))
             .map(|s| s.to_string());
 
         // Abstract format: "[国籍] 作者 / 出版日期 / 出版社 / 价格 / 装帧"
